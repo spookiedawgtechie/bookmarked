@@ -1,7 +1,7 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getAllBooks } from '../../lib/db';
 import { colors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
@@ -44,6 +44,9 @@ export default function Stats() {
   }
   const maxQ = Math.max(...quarters, 1);
 
+  const recapYears = [...new Set(finished.map((b) => new Date(b.finishedAt!).getFullYear()))]
+    .sort((a, b) => b - a);
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
       <Text style={styles.heading}>{year}</Text>
@@ -73,6 +76,22 @@ export default function Stats() {
           </View>
         ))}
       </View>
+
+      {recapYears.length > 0 && (
+        <>
+          <Text style={styles.subheading}>Recaps</Text>
+          {recapYears.map((y) => (
+            <Pressable
+              key={y}
+              style={styles.recapRow}
+              onPress={() => router.push(`/recap/${y}`)}
+            >
+              <Text style={styles.recapRowText}>{y} in books</Text>
+              <Text style={styles.recapRowArrow}>→</Text>
+            </Pressable>
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -118,4 +137,16 @@ const styles = StyleSheet.create({
   barFill: { width: '100%', backgroundColor: colors.blue, borderRadius: 6 },
   quarterCount: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 8 },
   quarterLabel: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  recapRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  recapRowText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  recapRowArrow: { color: colors.textDim, fontSize: 16 },
 });

@@ -1,9 +1,18 @@
-import { Link, useFocusEffect } from 'expo-router';
+import Slider from '@expo/ui/community/slider';
 import { Image } from 'expo-image';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { getAllBooks } from '../../lib/db';
+import {
+  Dimensions,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { getAllBooks, setProgress, setStatus } from '../../lib/db';
 import { colors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
 
@@ -19,69 +28,22 @@ function progressPct(book: Book): number | null {
   return Math.round((book.currentPage / book.totalPages) * 100);
 }
 
-function BookRow({ book }: { book: Book }) {
-  const pct = progressPct(book);
-  return (
-    <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
-      <Pressable style={styles.row}>
-        {book.coverUrl ? (
-          <Image source={{ uri: book.coverUrl }} style={styles.cover} contentFit="cover" />
-        ) : (
-          <View style={[styles.cover, styles.coverPlaceholder]}>
-            <Text style={styles.coverPlaceholderText}>📖</Text>
-          </View>
-        )}
-        <View style={styles.rowText}>
-          <Text style={styles.title} numberOfLines={2}>
-            {book.title}
-          </Text>
-          <Text style={styles.author} numberOfLines={1}>
-            {book.author}
-          </Text>
-          {book.status === 'reading' && pct !== null && (
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${pct}%` }]} />
-            </View>
-          )}
-          {book.status === 'reading' && (
-            <Text style={styles.meta}>
-              {pct !== null
-                ? `Page ${book.currentPage} of ${book.totalPages} · ${pct}%`
-                : `Page ${book.currentPage}`}
-            </Text>
-          )}
-          {book.status === 'read' && book.rating !== null && (
-            <Text style={[styles.meta, { color: colors.orange }]}>★ {book.rating}/10</Text>
-          )}
-        </View>
-      </Pressable>
-    </Link>
-  );
-}
-
-function Section({ label, accent, books }: { label: string; accent: string; books: Book[] }) {
-  if (books.length === 0) return null;
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: accent }]}>{label}</Text>
-      {books.map((b) => (
-        <BookRow key={b.id} book={b} />
-      ))}
-    </View>
-  );
-}
-
-function GridCover({ book }: { book: Book }) {
+function CoverThumb({ book, showRating }: { book: Book; showRating?: boolean }) {
   return (
     <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
       <Pressable>
         {book.coverUrl ? (
-          <Image source={{ uri: book.coverUrl }} style={styles.gridCover} contentFit="cover" />
+          <Image source={{ uri: book.coverUrl }} style={styles.thumb} contentFit="cover" />
         ) : (
-          <View style={[styles.gridCover, styles.gridPlaceholder]}>
-            <Text style={styles.gridPlaceholderTitle} numberOfLines={4}>
+          <View style={[styles.thumb, styles.thumbPlaceholder]}>
+            <Text style={styles.thumbPlaceholderText} numberOfLines={4}>
               {book.title}
             </Text>
+          </View>
+        )}
+        {showRating && book.rating !== null && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{book.rating}</Text>
           </View>
         )}
       </Pressable>
@@ -89,16 +51,62 @@ function GridCover({ book }: { book: Book }) {
   );
 }
 
-function GridSection({ label, accent, books }: { label: string; accent: string; books: Book[] }) {
-  if (books.length === 0) return null;
+function HeroCard({ book, onLog }: { book: Book; onLog: (b: Book) => void }) {
+  const pct = progressPct(book);
   return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: accent }]}>{label}</Text>
-      <View style={styles.grid}>
-        {books.map((b) => (
-          <GridCover key={b.id} book={b} />
-        ))}
+    <Pressable
+      style={styles.hero}
+      onPress={() => router.push({ pathname: '/book/[id]', params: { id: String(book.id) } })}
+    >
+      {book.coverUrl ? (
+        <Image source={{ uri: book.coverUrl }} style={styles.heroCover} contentFit="cover" />
+      ) : (
+        <View style={[styles.heroCover, styles.thumbPlaceholder]}>
+          <Text style={styles.thumbPlaceholderText} numberOfLines={5}>
+            {book.title}
+          </Text>
+        </View>
+      )}
+      <View style={styles.heroBody}>
+        <Text style={styles.heroTitle} numberOfLines={2}>
+          {book.title}
+        </Text>
+        <Text style={styles.heroAuthor} numberOfLines={1}>
+          {book.author}
+        </Text>
+        {pct !== null && (
+          <>
+            <View style={styles.heroTrack}>
+              <View style={[styles.heroFill, { width: `${pct}%` }]} />
+            </View>
+            <Text style={styles.heroMeta}>
+              Page {book.currentPage} of {book.totalPages} · {pct}%
+            </Text>
+          </>
+        )}
+        {book.totalPages ? (
+          <Pressable style={styles.logBtn} onPress={() => onLog(book)}>
+            <Text style={styles.logBtnText}>Log progress</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.heroMeta}>Tap to set the page count</Text>
+        )}
       </View>
+    </Pressable>
+  );
+}
+
+function RowHeader({ label, accent, href }: { label: string; accent: string; href?: string }) {
+  return (
+    <View style={styles.rowHeader}>
+      <Text style={[styles.sectionLabel, { color: accent }]}>{label}</Text>
+      {href && (
+        <Link href={href} asChild>
+          <Pressable hitSlop={8}>
+            <Text style={styles.seeAll}>See all →</Text>
+          </Pressable>
+        </Link>
+      )}
     </View>
   );
 }
@@ -106,30 +114,143 @@ function GridSection({ label, accent, books }: { label: string; accent: string; 
 export default function Shelf() {
   const db = useSQLiteContext();
   const [books, setBooks] = useState<Book[]>([]);
+  const [logBook, setLogBook] = useState<Book | null>(null);
+  const [logPage, setLogPage] = useState(0);
 
-  useFocusEffect(
-    useCallback(() => {
-      getAllBooks(db).then(setBooks);
-    }, [db])
-  );
+  const refresh = useCallback(() => {
+    getAllBooks(db).then(setBooks);
+  }, [db]);
+
+  useFocusEffect(refresh);
 
   const reading = books.filter((b) => b.status === 'reading');
   const want = books.filter((b) => b.status === 'want');
-  const read = books.filter((b) => b.status === 'read');
+  const read = books
+    .filter((b) => b.status === 'read')
+    .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''));
+
+  const year = new Date().getFullYear();
+  const finishedThisYear = read.filter(
+    (b) => b.finishedAt && new Date(b.finishedAt).getFullYear() === year
+  );
+  const pagesThisYear = finishedThisYear.reduce((s, b) => s + (b.totalPages ?? 0), 0);
+
+  function openLog(book: Book) {
+    setLogBook(book);
+    setLogPage(book.currentPage);
+  }
+
+  async function saveLog() {
+    if (!logBook) return;
+    await setProgress(db, logBook.id, logPage);
+    if (logBook.totalPages && logPage >= logBook.totalPages) {
+      await setStatus(db, logBook.id, 'read');
+    }
+    setLogBook(null);
+    refresh();
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 32 }}>
       {books.length === 0 && (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Your shelf is empty</Text>
+          <Text style={styles.emptyText}>Head to the Search tab and add your first book.</Text>
+        </View>
+      )}
+
+      {reading.length > 0 && (
+        <View style={styles.section}>
+          <RowHeader label="Currently Reading" accent={colors.green} />
+          {reading.map((b) => (
+            <HeroCard key={b.id} book={b} onLog={openLog} />
+          ))}
+        </View>
+      )}
+
+      {books.length > 0 && reading.length === 0 && (
+        <View style={styles.section}>
+          <RowHeader label="Currently Reading" accent={colors.green} />
           <Text style={styles.emptyText}>
-            Head to the Search tab and add your first book.
+            Nothing in progress — pick something from Up next.
           </Text>
         </View>
       )}
-      <Section label="Currently Reading" accent={colors.green} books={reading} />
-      <GridSection label="Want to Read" accent={colors.blue} books={want} />
-      <GridSection label="Read" accent={colors.orange} books={read} />
+
+      {want.length > 0 && (
+        <View style={styles.section}>
+          <RowHeader label="Up next" accent={colors.blue} href="/list/want" />
+          <View style={styles.gridRow}>
+            {want.slice(0, GRID_COLS).map((b) => (
+              <CoverThumb key={b.id} book={b} />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {read.length > 0 && (
+        <View style={styles.section}>
+          <RowHeader label="Recently finished" accent={colors.orange} href="/list/read" />
+          <View style={styles.gridRow}>
+            {read.slice(0, GRID_COLS).map((b) => (
+              <CoverThumb key={b.id} book={b} showRating />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {finishedThisYear.length > 0 && (
+        <Pressable style={styles.yearStrip} onPress={() => router.push(`/recap/${year}`)}>
+          <Text style={styles.yearStripText}>
+            {year} · {finishedThisYear.length}{' '}
+            {finishedThisYear.length === 1 ? 'book' : 'books'} · {pagesThisYear} pages →
+          </Text>
+        </Pressable>
+      )}
+
+      <Modal
+        visible={logBook !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setLogBook(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setLogBook(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {logBook && (
+              <>
+                <Text style={styles.modalTitle} numberOfLines={1}>
+                  {logBook.title}
+                </Text>
+                <Text style={styles.modalMeta}>
+                  Page {logPage} of {logBook.totalPages}
+                  {logBook.totalPages
+                    ? ` · ${Math.round((logPage / logBook.totalPages) * 100)}%`
+                    : ''}
+                </Text>
+                <Slider
+                  style={{ width: '100%', height: 40 }}
+                  minimumValue={0}
+                  maximumValue={logBook.totalPages ?? 1}
+                  step={1}
+                  value={logPage}
+                  onValueChange={(v: number) => setLogPage(Math.round(v))}
+                  minimumTrackTintColor={colors.green}
+                  maximumTrackTintColor={colors.border}
+                  thumbTintColor={colors.green}
+                />
+                <View style={styles.modalBtnRow}>
+                  <Pressable style={styles.modalCancel} onPress={() => setLogBook(null)}>
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={styles.modalSave} onPress={saveLog}>
+                    <Text style={styles.modalSaveText}>Save</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -137,55 +258,120 @@ export default function Shelf() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   section: { marginTop: 20, paddingHorizontal: 16 },
+  rowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: 10,
   },
-  row: {
+  seeAll: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
+  hero: {
     flexDirection: 'row',
     backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
   },
-  cover: { width: 52, height: 78, borderRadius: 4, backgroundColor: colors.border },
-  coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  coverPlaceholderText: { fontSize: 22 },
-  rowText: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-  title: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  author: { color: colors.textDim, fontSize: 13, marginTop: 2 },
-  meta: { color: colors.textDim, fontSize: 12, marginTop: 6 },
-  progressTrack: {
-    height: 4,
-    borderRadius: 2,
+  heroCover: { width: 96, height: 144, borderRadius: 8, backgroundColor: colors.border },
+  heroBody: { flex: 1, marginLeft: 14, justifyContent: 'center' },
+  heroTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  heroAuthor: { color: colors.textDim, fontSize: 14, marginTop: 2 },
+  heroTrack: {
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.border,
-    marginTop: 8,
+    marginTop: 12,
   },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: colors.green },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
-  gridCover: {
+  heroFill: { height: 6, borderRadius: 3, backgroundColor: colors.green },
+  heroMeta: { color: colors.textDim, fontSize: 12, marginTop: 6 },
+  logBtn: {
+    backgroundColor: colors.green,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  logBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
+  gridRow: { flexDirection: 'row', gap: GRID_GAP },
+  thumb: {
     width: COVER_W,
     height: COVER_H,
     borderRadius: 6,
     backgroundColor: colors.card,
   },
-  gridPlaceholder: {
+  thumbPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10,
+    padding: 6,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  gridPlaceholderTitle: {
+  thumbPlaceholderText: {
     color: colors.textDim,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
   },
+  badge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  badgeText: { color: colors.orange, fontSize: 11, fontWeight: '700' },
+  yearStrip: {
+    marginTop: 24,
+    marginHorizontal: 16,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  yearStripText: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
   empty: { alignItems: 'center', marginTop: 120, paddingHorizontal: 32 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
   emptyText: { color: colors.textDim, fontSize: 14, marginTop: 8, textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  modalMeta: { color: colors.textDim, fontSize: 13, marginTop: 4 },
+  modalBtnRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  modalCancel: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelText: { color: colors.text, fontWeight: '600' },
+  modalSave: {
+    flex: 1,
+    backgroundColor: colors.green,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalSaveText: { color: '#000', fontWeight: '700' },
 });
