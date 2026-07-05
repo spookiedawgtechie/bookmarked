@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Bookmarked",
+    "slug": "bookmarked",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "bookmarked",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "plugins": ["expo-router", "expo-sqlite"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
