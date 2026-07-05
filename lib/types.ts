@@ -16,4 +16,5 @@ export interface Book {
   addedAt: string; // ISO date strings
   startedAt: string | null;
   finishedAt: string | null;
+  updatedAt: string | null; // last progress/status activity
 }

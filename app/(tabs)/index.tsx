@@ -18,8 +18,12 @@ import type { Book } from '../../lib/types';
 
 const GRID_COLS = 4;
 const GRID_GAP = 10;
+// Home rows sit inside cards (screen padding 16 + card padding 12 per side),
+// so thumbs are sized to fill the card interior exactly.
+const CARD_PAD = 12;
 const COVER_W = Math.floor(
-  (Dimensions.get('window').width - 32 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS
+  (Dimensions.get('window').width - 32 - CARD_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) /
+    GRID_COLS
 );
 const COVER_H = Math.floor(COVER_W * 1.5);
 
@@ -123,7 +127,11 @@ export default function Shelf() {
 
   useFocusEffect(refresh);
 
-  const reading = books.filter((b) => b.status === 'reading');
+  const reading = books
+    .filter((b) => b.status === 'reading')
+    .sort((a, b) =>
+      (b.updatedAt ?? b.startedAt ?? '').localeCompare(a.updatedAt ?? a.startedAt ?? '')
+    );
   const want = books.filter((b) => b.status === 'want');
   const read = books
     .filter((b) => b.status === 'read')
@@ -180,7 +188,7 @@ export default function Shelf() {
       {want.length > 0 && (
         <View style={styles.section}>
           <RowHeader label="Up next" accent={colors.blue} href="/list/want" />
-          <View style={styles.gridRow}>
+          <View style={styles.rowCard}>
             {want.slice(0, GRID_COLS).map((b) => (
               <CoverThumb key={b.id} book={b} />
             ))}
@@ -191,7 +199,7 @@ export default function Shelf() {
       {read.length > 0 && (
         <View style={styles.section}>
           <RowHeader label="Recently finished" accent={colors.orange} href="/list/read" />
-          <View style={styles.gridRow}>
+          <View style={styles.rowCard}>
             {read.slice(0, GRID_COLS).map((b) => (
               <CoverThumb key={b.id} book={b} showRating />
             ))}
@@ -275,7 +283,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.card,
     borderRadius: 14,
-    padding: 14,
+    padding: CARD_PAD,
     marginBottom: 12,
   },
   heroCover: { width: 96, height: 144, borderRadius: 8, backgroundColor: colors.border },
@@ -300,7 +308,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   logBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
-  gridRow: { flexDirection: 'row', gap: GRID_GAP },
+  rowCard: {
+    flexDirection: 'row',
+    gap: GRID_GAP,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: CARD_PAD,
+  },
   thumb: {
     width: COVER_W,
     height: COVER_H,

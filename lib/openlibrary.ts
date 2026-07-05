@@ -20,6 +20,15 @@ export function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {
   return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg`;
 }
 
+// A work lists cover IDs from all its editions — the raw material for the
+// "pick the cover matching your physical copy" feature.
+export async function fetchCoverIds(olKey: string): Promise<number[]> {
+  const res = await fetch(`https://openlibrary.org${olKey}.json`);
+  if (!res.ok) return [];
+  const json = (await res.json()) as { covers?: number[] };
+  return (json.covers ?? []).filter((id) => id > 0).slice(0, 30);
+}
+
 // Work pages (e.g. /works/OL45883W) carry the book blurb; the field is either
 // a plain string or a { value } wrapper depending on the record.
 export async function fetchDescription(olKey: string): Promise<string | null> {

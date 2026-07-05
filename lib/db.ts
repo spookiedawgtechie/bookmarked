@@ -18,14 +18,21 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       added_at TEXT NOT NULL,
       started_at TEXT,
       finished_at TEXT,
-      description TEXT
+      description TEXT,
+      updated_at TEXT
     );
   `);
-  try {
-    // Upgrade path for databases created before the description column existed.
-    await db.execAsync('ALTER TABLE books ADD COLUMN description TEXT');
-  } catch {
-    // Column already exists.
+  // Upgrade paths for databases created before these columns existed;
+  // each ALTER throws harmlessly once the column is present.
+  for (const ddl of [
+    'ALTER TABLE books ADD COLUMN description TEXT',
+    'ALTER TABLE books ADD COLUMN updated_at TEXT',
+  ]) {
+    try {
+      await db.execAsync(ddl);
+    } catch {
+      // Column already exists.
+    }
   }
 }
 
@@ -45,6 +52,7 @@ function rowToBook(r: Record<string, unknown>): Book {
     addedAt: r.added_at as string,
     startedAt: (r.started_at as string) ?? null,
     finishedAt: (r.finished_at as string) ?? null,
+    updatedAt: (r.updated_at as string) ?? null,
   };
 }
 
@@ -93,24 +101,27 @@ export async function setStatus(
   const now = new Date().toISOString();
   if (status === 'reading') {
     await db.runAsync(
-      `UPDATE books SET status = ?, started_at = COALESCE(started_at, ?), finished_at = NULL WHERE id = ?`,
+      `UPDATE books SET status = ?, started_at = COALESCE(started_at, ?), finished_at = NULL, updated_at = ? WHERE id = ?`,
       status,
+      now,
       now,
       id
     );
   } else if (status === 'read') {
     await db.runAsync(
       `UPDATE books SET status = ?, started_at = COALESCE(started_at, ?), finished_at = ?,
-       current_page = COALESCE(total_pages, current_page) WHERE id = ?`,
+       current_page = COALESCE(total_pages, current_page), updated_at = ? WHERE id = ?`,
       status,
+      now,
       now,
       now,
       id
     );
   } else {
     await db.runAsync(
-      `UPDATE books SET status = ?, finished_at = NULL WHERE id = ?`,
+      `UPDATE books SET status = ?, finished_at = NULL, updated_at = ? WHERE id = ?`,
       status,
+      now,
       id
     );
   }
@@ -121,7 +132,20 @@ export async function setProgress(
   id: number,
   currentPage: number
 ): Promise<void> {
-  await db.runAsync('UPDATE books SET current_page = ? WHERE id = ?', currentPage, id);
+  await db.runAsync(
+    'UPDATE books SET current_page = ?, updated_at = ? WHERE id = ?',
+    currentPage,
+    new Date().toISOString(),
+    id
+  );
+}
+
+export async function setCoverUrl(
+  db: SQLiteDatabase,
+  id: number,
+  coverUrl: string
+): Promise<void> {
+  await db.runAsync('UPDATE books SET cover_url = ? WHERE id = ?', coverUrl, id);
 }
 
 export async function setTotalPages(

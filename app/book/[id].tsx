@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -18,6 +19,7 @@ import {
 import {
   deleteBook,
   getBook,
+  setCoverUrl,
   setDescription,
   setFinishedDate,
   setProgress,
@@ -26,7 +28,7 @@ import {
   setStatus,
   setTotalPages,
 } from '../../lib/db';
-import { fetchDescription } from '../../lib/openlibrary';
+import { coverUrl, fetchCoverIds, fetchDescription } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
 import type { Book, BookStatus } from '../../lib/types';
 
@@ -47,6 +49,10 @@ export default function BookDetail() {
   const [ratingDraft, setRatingDraft] = useState(0);
   const [descLoading, setDescLoading] = useState(false);
   const [finishedInput, setFinishedInput] = useState('');
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+  const [altCovers, setAltCovers] = useState<number[] | null>(null);
+  const [coversLoading, setCoversLoading] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
   // @expo/ui's slider has no onSlidingComplete, so persistence is debounced
   // behind onValueChange instead.
   const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,6 +133,23 @@ export default function BookDetail() {
     }, 600);
   }
 
+  function openCoverPicker() {
+    setCoverPickerOpen(true);
+    if (altCovers === null && book) {
+      setCoversLoading(true);
+      fetchCoverIds(book.olKey)
+        .then(setAltCovers)
+        .catch(() => setAltCovers([]))
+        .finally(() => setCoversLoading(false));
+    }
+  }
+
+  async function onPickCover(coverId: number) {
+    await setCoverUrl(db, bookId, coverUrl(coverId, 'M'));
+    setCoverPickerOpen(false);
+    reload();
+  }
+
   async function onSaveFinished() {
     const v = finishedInput.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
@@ -168,19 +191,27 @@ export default function BookDetail() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ title: '' }} />
-      <ScrollView style={styles.screen} contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.screen}
+        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
-          {book.coverUrl ? (
-            <Image
-              source={{ uri: book.coverUrl.replace('-M.jpg', '-L.jpg') }}
-              style={styles.cover}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.cover, styles.coverPlaceholder]}>
-              <Text style={{ fontSize: 40 }}>📖</Text>
-            </View>
-          )}
+          <Pressable onPress={openCoverPicker}>
+            {book.coverUrl ? (
+              <Image
+                source={{ uri: book.coverUrl.replace('-M.jpg', '-L.jpg') }}
+                style={styles.cover}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.cover, styles.coverPlaceholder]}>
+                <Text style={{ fontSize: 40 }}>📖</Text>
+              </View>
+            )}
+            <Text style={styles.coverHint}>Tap to change</Text>
+          </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>{book.title}</Text>
             <Text style={styles.author}>{book.author}</Text>
@@ -312,6 +343,9 @@ export default function BookDetail() {
             placeholderTextColor={colors.textDim}
             value={reviewDraft}
             onChangeText={setReviewDraft}
+            onFocus={() =>
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)
+            }
           />
           <Pressable style={styles.saveBtn} onPress={onSaveReview}>
             <Text style={styles.saveBtnText}>Save review</Text>
@@ -322,6 +356,39 @@ export default function BookDetail() {
           <Text style={styles.deleteBtnText}>Remove from shelf</Text>
         </Pressable>
       </ScrollView>
+
+      <Modal
+        visible={coverPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCoverPickerOpen(false)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setCoverPickerOpen(false)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>Pick a cover</Text>
+            <Text style={styles.hint}>
+              Covers from other editions — choose the one matching your copy.
+            </Text>
+            {coversLoading && <ActivityIndicator color={colors.green} />}
+            {!coversLoading && altCovers !== null && altCovers.length === 0 && (
+              <Text style={styles.hint}>No alternate covers found for this book.</Text>
+            )}
+            <ScrollView style={{ maxHeight: 420 }}>
+              <View style={styles.pickerGrid}>
+                {(altCovers ?? []).map((id) => (
+                  <Pressable key={id} onPress={() => onPickCover(id)}>
+                    <Image
+                      source={{ uri: coverUrl(id, 'M') }}
+                      style={styles.pickerCover}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -331,6 +398,37 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', marginBottom: 20 },
   cover: { width: 100, height: 150, borderRadius: 8, backgroundColor: colors.border },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  coverHint: {
+    color: colors.textDim,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  pickerCard: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  pickerTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  pickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingTop: 8,
+  },
+  pickerCover: {
+    width: 90,
+    height: 135,
+    borderRadius: 6,
+    backgroundColor: colors.border,
+  },
   headerText: { flex: 1, marginLeft: 16, justifyContent: 'center' },
   title: { color: colors.text, fontSize: 20, fontWeight: '700' },
   author: { color: colors.textDim, fontSize: 15, marginTop: 4 },
