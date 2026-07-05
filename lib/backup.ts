@@ -1,3 +1,5 @@
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform, Share } from 'react-native';
 
@@ -27,4 +29,63 @@ export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
   } else {
     await Share.share({ message: payload });
   }
+}
+
+// Restores a backup produced by exportLibrary. Books are matched by their
+// Open Library key: existing rows are overwritten, new ones inserted.
+// Returns the number of books imported, or throws on an unrecognized file.
+export async function importLibrary(db: SQLiteDatabase): Promise<number | null> {
+  const picked = await DocumentPicker.getDocumentAsync({
+    type: 'application/json',
+    copyToCacheDirectory: true,
+  });
+  if (picked.canceled || picked.assets.length === 0) return null;
+  const asset = picked.assets[0];
+
+  let text: string;
+  if (Platform.OS === 'web') {
+    text = asset.file ? await asset.file.text() : await (await fetch(asset.uri)).text();
+  } else {
+    text = await FileSystem.readAsStringAsync(asset.uri);
+  }
+
+  const payload = JSON.parse(text) as { app?: string; books?: Record<string, unknown>[] };
+  if (payload.app !== 'bookmarked' || !Array.isArray(payload.books)) {
+    throw new Error('Not a Bookmarked backup file');
+  }
+
+  let count = 0;
+  for (const b of payload.books) {
+    if (typeof b.ol_key !== 'string' || typeof b.title !== 'string') continue;
+    await db.runAsync(
+      `INSERT INTO books
+         (ol_key, title, author, cover_url, total_pages, status, current_page,
+          rating, review, added_at, started_at, finished_at, description, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(ol_key) DO UPDATE SET
+         title = excluded.title, author = excluded.author,
+         cover_url = excluded.cover_url, total_pages = excluded.total_pages,
+         status = excluded.status, current_page = excluded.current_page,
+         rating = excluded.rating, review = excluded.review,
+         added_at = excluded.added_at, started_at = excluded.started_at,
+         finished_at = excluded.finished_at, description = excluded.description,
+         updated_at = excluded.updated_at`,
+      b.ol_key,
+      b.title,
+      (b.author as string) ?? '',
+      (b.cover_url as string) ?? null,
+      (b.total_pages as number) ?? null,
+      (b.status as string) ?? 'want',
+      (b.current_page as number) ?? 0,
+      (b.rating as number) ?? null,
+      (b.review as string) ?? null,
+      (b.added_at as string) ?? new Date().toISOString(),
+      (b.started_at as string) ?? null,
+      (b.finished_at as string) ?? null,
+      (b.description as string) ?? null,
+      (b.updated_at as string) ?? null
+    );
+    count += 1;
+  }
+  return count;
 }

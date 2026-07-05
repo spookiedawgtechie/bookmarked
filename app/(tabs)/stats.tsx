@@ -2,7 +2,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { exportLibrary } from '../../lib/backup';
+import { notify } from '../../lib/alert';
+import { exportLibrary, importLibrary } from '../../lib/backup';
 import { getAllBooks } from '../../lib/db';
 import { colors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
@@ -98,6 +99,23 @@ export default function Stats() {
       <Pressable style={styles.recapRow} onPress={() => exportLibrary(db)}>
         <Text style={styles.recapRowText}>Export library as JSON</Text>
         <Text style={styles.recapRowArrow}>↓</Text>
+      </Pressable>
+      <Pressable
+        style={styles.recapRow}
+        onPress={async () => {
+          try {
+            const count = await importLibrary(db);
+            if (count !== null) {
+              notify('Import complete', `${count} books imported or updated.`);
+              getAllBooks(db).then(setBooks);
+            }
+          } catch {
+            notify('Import failed', 'That file is not a Bookmarked backup.');
+          }
+        }}
+      >
+        <Text style={styles.recapRowText}>Import library from JSON</Text>
+        <Text style={styles.recapRowArrow}>↑</Text>
       </Pressable>
     </ScrollView>
   );

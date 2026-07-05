@@ -5,7 +5,6 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -28,6 +27,7 @@ import {
   setStatus,
   setTotalPages,
 } from '../../lib/db';
+import { confirmDialog, notify } from '../../lib/alert';
 import { coverUrl, fetchCoverIds, fetchDescription } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
 import type { Book, BookStatus } from '../../lib/types';
@@ -153,12 +153,12 @@ export default function BookDetail() {
   async function onSaveFinished() {
     const v = finishedInput.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-      Alert.alert('Invalid date', 'Use the format YYYY-MM-DD, e.g. 2023-11-04');
+      notify('Invalid date', 'Use the format YYYY-MM-DD, e.g. 2023-11-04');
       return;
     }
     const d = new Date(`${v}T12:00:00.000Z`);
     if (Number.isNaN(d.getTime()) || d.getTime() > Date.now()) {
-      Alert.alert('Invalid date', 'That date does not exist or is in the future.');
+      notify('Invalid date', 'That date does not exist or is in the future.');
       return;
     }
     await setFinishedDate(db, bookId, d.toISOString());
@@ -172,17 +172,10 @@ export default function BookDetail() {
   }
 
   function onDelete() {
-    Alert.alert('Remove book', `Remove "${book!.title}" from your shelf?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteBook(db, bookId);
-          router.back();
-        },
-      },
-    ]);
+    confirmDialog('Remove book', `Remove "${book!.title}" from your shelf?`, 'Remove', async () => {
+      await deleteBook(db, bookId);
+      router.back();
+    });
   }
 
   return (
