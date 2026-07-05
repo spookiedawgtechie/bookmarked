@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { exportLibrary } from '../../lib/backup';
 import { getAllBooks } from '../../lib/db';
 import { colors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
@@ -92,6 +93,12 @@ export default function Stats() {
           ))}
         </>
       )}
+
+      <Text style={styles.subheading}>Backup</Text>
+      <Pressable style={styles.recapRow} onPress={() => exportLibrary(db)}>
+        <Text style={styles.recapRowText}>Export library as JSON</Text>
+        <Text style={styles.recapRowArrow}>↓</Text>
+      </Pressable>
     </ScrollView>
   );
 }

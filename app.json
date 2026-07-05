@@ -8,11 +8,15 @@
     "scheme": "bookmarked",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
-    "plugins": ["expo-router", "expo-sqlite"],
+    "plugins": [
+      "expo-router",
+      "expo-sqlite"
+    ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.spookiedawgtechie.bookmarked",
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -22,7 +26,16 @@
       "predictiveBackGestureEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8235acf0-0da0-4bde-9642-4410b44292b2"
+      }
+    },
+    "owner": "spookiedawgtechie"
   }
 }
