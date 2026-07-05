@@ -1,7 +1,8 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { Platform, Share } from 'react-native';
+import { Platform } from 'react-native';
 
 // Full-library JSON dump. On web this doubles as insurance against Safari
 // evicting site storage; on Android it's a general backup you can save anywhere.
@@ -18,16 +19,30 @@ export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
     2
   );
 
+  const fileName = `bookmarked-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
   if (Platform.OS === 'web') {
-    const blob = new Blob([payload], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bookmarked-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // On mobile browsers (iOS PWA especially) sharing a real File keeps the
+    // .json name and type; anchor download is the desktop fallback.
+    const file = new File([payload], fileName, { type: 'application/json' });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Bookmarked backup' });
+    } else {
+      const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   } else {
-    await Share.share({ message: payload });
+    // Share an actual .json file, not a text message.
+    const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.writeAsStringAsync(fileUri, payload);
+    await Sharing.shareAsync(fileUri, {
+      mimeType: 'application/json',
+      dialogTitle: 'Export Bookmarked backup',
+    });
   }
 }
 
@@ -35,8 +50,9 @@ export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
 // Open Library key: existing rows are overwritten, new ones inserted.
 // Returns the number of books imported, or throws on an unrecognized file.
 export async function importLibrary(db: SQLiteDatabase): Promise<number | null> {
+  // text/plain included so backups that platforms saved as .txt still import.
   const picked = await DocumentPicker.getDocumentAsync({
-    type: 'application/json',
+    type: ['application/json', 'text/plain'],
     copyToCacheDirectory: true,
   });
   if (picked.canceled || picked.assets.length === 0) return null;

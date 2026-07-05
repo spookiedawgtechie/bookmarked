@@ -10,7 +10,8 @@
     "backgroundColor": "#000000",
     "plugins": [
       "expo-router",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-sharing"
     ],
     "ios": {
       "supportsTablet": true
