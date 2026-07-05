@@ -21,7 +21,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Shelf',
+          title: 'Bookmarked - Shelf',
           tabBarIcon: ({ focused }) => <TabIcon glyph="📚" focused={focused} />,
         }}
       />
