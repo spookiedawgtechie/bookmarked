@@ -3,9 +3,10 @@ import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { getAllBooks } from '../../lib/db';
+import { getAllBooks, getAllSessions } from '../../lib/db';
+import { pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
-import type { Book } from '../../lib/types';
+import type { Book, ReadingSession } from '../../lib/types';
 
 function daysBetween(startIso: string, endIso: string): number {
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
@@ -49,6 +50,7 @@ export default function Recap() {
   const { year } = useLocalSearchParams<{ year: string }>();
   const y = Number(year);
   const [books, setBooks] = useState<Book[]>([]);
+  const [sessions, setSessions] = useState<ReadingSession[]>([]);
 
   useEffect(() => {
     getAllBooks(db).then((all) =>
@@ -63,9 +65,10 @@ export default function Recap() {
           .sort((a, b) => (a.finishedAt ?? '').localeCompare(b.finishedAt ?? ''))
       )
     );
+    getAllSessions(db).then(setSessions);
   }, [db, y]);
 
-  const pages = books.reduce((s, b) => s + (b.totalPages ?? 0), 0);
+  const pages = pagesInYear(sessions, y);
   const rated = books.filter((b) => b.rating !== null);
   const avgRating =
     rated.length > 0

@@ -12,9 +12,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { getAllBooks, setProgress, setStatus } from '../../lib/db';
+import { getAllBooks, getAllSessions, logProgress, setStatus } from '../../lib/db';
+import { currentStreakDays, pagesInLastDays, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
-import type { Book } from '../../lib/types';
+import type { Book, ReadingSession } from '../../lib/types';
 
 const GRID_COLS = 4;
 const GRID_GAP = 10;
@@ -118,11 +119,13 @@ function RowHeader({ label, accent, href }: { label: string; accent: string; hre
 export default function Shelf() {
   const db = useSQLiteContext();
   const [books, setBooks] = useState<Book[]>([]);
+  const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [logBook, setLogBook] = useState<Book | null>(null);
   const [logPage, setLogPage] = useState(0);
 
   const refresh = useCallback(() => {
     getAllBooks(db).then(setBooks);
+    getAllSessions(db).then(setSessions);
   }, [db]);
 
   useFocusEffect(refresh);
@@ -141,7 +144,9 @@ export default function Shelf() {
   const finishedThisYear = read.filter(
     (b) => b.finishedAt && new Date(b.finishedAt).getFullYear() === year
   );
-  const pagesThisYear = finishedThisYear.reduce((s, b) => s + (b.totalPages ?? 0), 0);
+  const pagesThisYear = pagesInYear(sessions, year);
+  const streak = currentStreakDays(sessions);
+  const weekPages = pagesInLastDays(sessions, 7);
 
   function openLog(book: Book) {
     setLogBook(book);
@@ -150,7 +155,7 @@ export default function Shelf() {
 
   async function saveLog() {
     if (!logBook) return;
-    await setProgress(db, logBook.id, logPage);
+    await logProgress(db, logBook.id, logBook.currentPage, logPage);
     if (logBook.totalPages && logPage >= logBook.totalPages) {
       await setStatus(db, logBook.id, 'read');
     }
@@ -164,6 +169,15 @@ export default function Shelf() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Your shelf is empty</Text>
           <Text style={styles.emptyText}>Head to the Search tab and add your first book.</Text>
+        </View>
+      )}
+
+      {sessions.length > 0 && (
+        <View style={styles.paceRow}>
+          <Text style={styles.paceText}>
+            {streak > 0 ? `🔥 ${streak} day${streak === 1 ? '' : 's'}` : 'No streak yet'}
+          </Text>
+          <Text style={styles.paceText}>{weekPages} pages this week</Text>
         </View>
       )}
 
@@ -265,6 +279,13 @@ export default function Shelf() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  paceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  paceText: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
   section: { marginTop: 20, paddingHorizontal: 16 },
   rowHeader: {
     flexDirection: 'row',

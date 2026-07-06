@@ -8,12 +8,19 @@ import { Platform } from 'react-native';
 // evicting site storage; on Android it's a general backup you can save anywhere.
 export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
   const books = await db.getAllAsync('SELECT * FROM books');
+  // Sessions carry the book's ol_key (not its local numeric id, which is
+  // meaningless on another device) so import can re-link them correctly.
+  const sessions = await db.getAllAsync(
+    `SELECT sessions.logged_at, sessions.from_page, sessions.to_page, books.ol_key as book_ol_key
+     FROM sessions JOIN books ON books.id = sessions.book_id`
+  );
   const payload = JSON.stringify(
     {
       app: 'bookmarked',
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: new Date().toISOString(),
       books,
+      sessions,
     },
     null,
     2
@@ -65,7 +72,11 @@ export async function importLibrary(db: SQLiteDatabase): Promise<number | null> 
     text = await FileSystem.readAsStringAsync(asset.uri);
   }
 
-  const payload = JSON.parse(text) as { app?: string; books?: Record<string, unknown>[] };
+  const payload = JSON.parse(text) as {
+    app?: string;
+    books?: Record<string, unknown>[];
+    sessions?: Record<string, unknown>[];
+  };
   if (payload.app !== 'bookmarked' || !Array.isArray(payload.books)) {
     throw new Error('Not a Bookmarked backup file');
   }
@@ -103,5 +114,33 @@ export async function importLibrary(db: SQLiteDatabase): Promise<number | null> 
     );
     count += 1;
   }
+
+  // Sessions reference books by ol_key in the backup (schemaVersion 1
+  // backups predate sessions entirely — payload.sessions is simply absent).
+  if (Array.isArray(payload.sessions)) {
+    for (const s of payload.sessions) {
+      if (
+        typeof s.book_ol_key !== 'string' ||
+        typeof s.logged_at !== 'string' ||
+        typeof s.from_page !== 'number' ||
+        typeof s.to_page !== 'number'
+      ) {
+        continue;
+      }
+      const row = await db.getFirstAsync<{ id: number }>(
+        'SELECT id FROM books WHERE ol_key = ?',
+        s.book_ol_key
+      );
+      if (!row) continue;
+      await db.runAsync(
+        `INSERT OR IGNORE INTO sessions (book_id, logged_at, from_page, to_page) VALUES (?, ?, ?, ?)`,
+        row.id,
+        s.logged_at,
+        s.from_page,
+        s.to_page
+      );
+    }
+  }
+
   return count;
 }

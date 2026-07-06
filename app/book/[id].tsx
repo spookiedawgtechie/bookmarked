@@ -18,10 +18,10 @@ import {
 import {
   deleteBook,
   getBook,
+  logProgress,
   setCoverUrl,
   setDescription,
   setFinishedDate,
-  setProgress,
   setRating,
   setReview,
   setStatus,
@@ -57,12 +57,17 @@ export default function BookDetail() {
   // behind onValueChange instead.
   const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ratingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last page actually written to the DB — the "from" side of the next
+  // session delta. Multiple debounced writes in one visit each need their
+  // own accurate from/to, not just the value at screen-load time.
+  const persistedPageRef = useRef(0);
 
   const reload = useCallback(async () => {
     const b = await getBook(db, bookId);
     setBook(b);
     if (b) {
       setPage(b.currentPage);
+      persistedPageRef.current = b.currentPage;
       setReviewDraft(b.review ?? '');
       setRatingDraft(b.rating ?? 0);
     }
@@ -116,7 +121,9 @@ export default function BookDetail() {
     setPage(v);
     if (progressTimer.current) clearTimeout(progressTimer.current);
     progressTimer.current = setTimeout(async () => {
-      await setProgress(db, bookId, v);
+      const from = persistedPageRef.current;
+      await logProgress(db, bookId, from, v);
+      persistedPageRef.current = v;
       if (book && book.totalPages && v >= book.totalPages) {
         await setStatus(db, bookId, 'read');
         reload();

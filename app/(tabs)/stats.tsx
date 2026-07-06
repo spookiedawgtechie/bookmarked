@@ -4,9 +4,10 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { notify } from '../../lib/alert';
 import { exportLibrary, importLibrary } from '../../lib/backup';
-import { getAllBooks } from '../../lib/db';
+import { getAllBooks, getAllSessions } from '../../lib/db';
+import { pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
-import type { Book } from '../../lib/types';
+import type { Book, ReadingSession } from '../../lib/types';
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
@@ -20,10 +21,12 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export default function Stats() {
   const db = useSQLiteContext();
   const [books, setBooks] = useState<Book[]>([]);
+  const [sessions, setSessions] = useState<ReadingSession[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       getAllBooks(db).then(setBooks);
+      getAllSessions(db).then(setSessions);
     }, [db])
   );
 
@@ -32,7 +35,7 @@ export default function Stats() {
   const finishedThisYear = finished.filter(
     (b) => new Date(b.finishedAt!).getFullYear() === year
   );
-  const pagesThisYear = finishedThisYear.reduce((sum, b) => sum + (b.totalPages ?? 0), 0);
+  const pagesThisYear = pagesInYear(sessions, year);
   const rated = books.filter((b) => b.rating !== null);
   const avgRating =
     rated.length > 0
@@ -108,6 +111,7 @@ export default function Stats() {
             if (count !== null) {
               notify('Import complete', `${count} books imported or updated.`);
               getAllBooks(db).then(setBooks);
+              getAllSessions(db).then(setSessions);
             }
           } catch {
             notify('Import failed', 'That file is not a Bookmarked backup.');

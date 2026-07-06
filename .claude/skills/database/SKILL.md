@@ -24,7 +24,17 @@ Single SQLite database `bookmarked.db`, opened by `SQLiteProvider` in `app/_layo
 | started_at | TEXT nullable | write-once (see lifecycle) |
 | finished_at | TEXT nullable | **drives all stats/recaps** (grouped by year/quarter) |
 | description | TEXT nullable | `null` = never fetched from Open Library; `''` = fetched, none exists (sentinel prevents refetch loops) |
-| updated_at | TEXT nullable | stamped by setProgress/setStatus; sorts Currently Reading |
+| updated_at | TEXT nullable | stamped by logProgress/setStatus; sorts Currently Reading |
+
+## sessions table
+
+One row per progress edit (page delta). `id, book_id, logged_at TEXT, from_page INTEGER, to_page INTEGER`, `UNIQUE(book_id, logged_at, from_page, to_page)` to make repeated writes/imports idempotent. **This is the only source of truth for "how many pages did I read and when"** — `books.current_page` is just the current position, not history.
+
+- **`logProgress(db, id, fromPage, toPage)`** in `lib/db.ts` is the single write path for progress — it inserts a session row (skipped if `fromPage === toPage`) AND updates `books.current_page`/`updated_at` in one call. **There is no `setProgress` anymore** — screens must never write `current_page` directly, or session history silently stops matching reality. Both call sites (`app/(tabs)/index.tsx` log-progress modal, `app/book/[id].tsx` slider) pass the last-known persisted page as `fromPage` — the detail screen keeps this in a `persistedPageRef` (not `book.currentPage`) so multiple debounced writes in one visit each produce an accurate delta, not one big delta from stale state.
+- **One-time backfill in `migrate()`**: for any book with `current_page > 0` and zero existing sessions, inserts a single historical session `0 → current_page` dated `finished_at ?? started_at ?? added_at`. Runs every launch but is a no-op once a book has any real session (idempotent via the `id NOT IN (SELECT book_id FROM sessions)` guard) — this is what keeps pre-sessions libraries from losing stats history.
+- `deleteBook` deletes the book's sessions first (no FK/cascade is declared — deliberately explicit for portability across the native/wasm SQLite builds).
+- Backup: `exportLibrary` joins sessions to `books.ol_key` (not the local numeric id, which is meaningless on another device) so `importLibrary` can re-link them to the right local book by key. Old (schemaVersion 1) backups simply have no `sessions` field — import treats that as zero sessions, not an error.
+- Pure computation over fetched sessions (`pagesInYear`, `pagesInLastDays`, `currentStreakDays`) lives in **`lib/stats.ts`**, not `lib/db.ts` — same "raw access vs. derived computation" split as screens doing their own `.filter`/`.reduce` over `getAllBooks()` results.
 
 ## Lifecycle invariants (encoded in `setStatus`)
 
@@ -37,8 +47,10 @@ Single SQLite database `bookmarked.db`, opened by `SQLiteProvider` in `app/_layo
 
 ## Stats math (what the numbers mean)
 
-- "Pages read" (Stats tab and recaps) = `SUM(total_pages)` over books with `status='read'` and `finished_at` in the relevant calendar year — computed in `app/(tabs)/stats.tsx` and `app/recap/[year].tsx`. **In-progress `current_page` never contributes to any stat**; a book's full page count lands the day it's marked read. Known product gap — the fix is roadmap item 1 (reading sessions), not a hack here.
-- Quarterly buckets group by `finished_at` month ÷ 3; average rating averages all non-null ratings.
+- **"Pages read" (Stats tab, home year-strip, recaps) = `pagesInYear(sessions, year)`** from `lib/stats.ts` — the sum of `max(0, to_page - from_page)` over every session logged in that calendar year, regardless of whether the book has been finished yet. This was previously `SUM(total_pages)` over finished books only (a real gap: in-progress reading counted for nothing); fixed once sessions shipped. Every screen showing "pages" must use this function, not a books-table sum, or the numbers will disagree with each other.
+- "Books finished" / quarterly-by-book-count charts still group by `finished_at` — that's a different, valid metric (how many books, not how many pages) and wasn't part of the gap; not changed.
+- Average rating averages all non-null ratings across all books, not scoped to the year (matches existing behavior, not part of this fix).
+- Streak (`currentStreakDays`) and weekly pace (`pagesInLastDays(sessions, 7)`) shown on the Shelf header are also sessions-derived; a streak counts distinct calendar days with ≥1 session, and stays "alive" through today even if nothing's logged yet today (only breaks once a full day is skipped).
 
 ## How to add a column
 

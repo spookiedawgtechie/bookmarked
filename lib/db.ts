@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { Book, BookStatus } from './types';
+import type { Book, BookStatus, ReadingSession } from './types';
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -21,6 +21,16 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       description TEXT,
       updated_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id INTEGER NOT NULL,
+      logged_at TEXT NOT NULL,
+      from_page INTEGER NOT NULL,
+      to_page INTEGER NOT NULL,
+      UNIQUE(book_id, logged_at, from_page, to_page)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_book ON sessions(book_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_logged_at ON sessions(logged_at);
   `);
   // Upgrade paths for databases created before these columns existed;
   // each ALTER throws harmlessly once the column is present.
@@ -34,6 +44,16 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       // Column already exists.
     }
   }
+  // One-time backfill for books that had progress before sessions existed:
+  // treat all progress-to-date as a single historical session, so existing
+  // libraries don't lose stats history. Only affects books with zero
+  // sessions so far, so it's a no-op on every later launch.
+  await db.execAsync(`
+    INSERT OR IGNORE INTO sessions (book_id, logged_at, from_page, to_page)
+    SELECT id, COALESCE(finished_at, started_at, added_at), 0, current_page
+    FROM books
+    WHERE current_page > 0 AND id NOT IN (SELECT book_id FROM sessions);
+  `);
 }
 
 function rowToBook(r: Record<string, unknown>): Book {
@@ -56,11 +76,28 @@ function rowToBook(r: Record<string, unknown>): Book {
   };
 }
 
+function rowToSession(r: Record<string, unknown>): ReadingSession {
+  return {
+    id: r.id as number,
+    bookId: r.book_id as number,
+    loggedAt: r.logged_at as string,
+    fromPage: r.from_page as number,
+    toPage: r.to_page as number,
+  };
+}
+
 export async function getAllBooks(db: SQLiteDatabase): Promise<Book[]> {
   const rows = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM books ORDER BY added_at DESC'
   );
   return rows.map(rowToBook);
+}
+
+export async function getAllSessions(db: SQLiteDatabase): Promise<ReadingSession[]> {
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM sessions ORDER BY logged_at ASC'
+  );
+  return rows.map(rowToSession);
 }
 
 export async function getBook(db: SQLiteDatabase, id: number): Promise<Book | null> {
@@ -127,15 +164,30 @@ export async function setStatus(
   }
 }
 
-export async function setProgress(
+// The single write path for progress: updates the book AND records a
+// session delta (skipped if fromPage === toPage, e.g. an unmoved slider).
+// Screens must call this instead of writing current_page directly, so no
+// progress update can bypass session history.
+export async function logProgress(
   db: SQLiteDatabase,
   id: number,
-  currentPage: number
+  fromPage: number,
+  toPage: number
 ): Promise<void> {
+  const now = new Date().toISOString();
+  if (toPage !== fromPage) {
+    await db.runAsync(
+      'INSERT OR IGNORE INTO sessions (book_id, logged_at, from_page, to_page) VALUES (?, ?, ?, ?)',
+      id,
+      now,
+      fromPage,
+      toPage
+    );
+  }
   await db.runAsync(
     'UPDATE books SET current_page = ?, updated_at = ? WHERE id = ?',
-    currentPage,
-    new Date().toISOString(),
+    toPage,
+    now,
     id
   );
 }
@@ -189,5 +241,6 @@ export async function setFinishedDate(
 }
 
 export async function deleteBook(db: SQLiteDatabase, id: number): Promise<void> {
+  await db.runAsync('DELETE FROM sessions WHERE book_id = ?', id);
   await db.runAsync('DELETE FROM books WHERE id = ?', id);
 }

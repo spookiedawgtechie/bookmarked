@@ -18,3 +18,11 @@ export interface Book {
   finishedAt: string | null;
   updatedAt: string | null; // last progress/status activity
 }
+
+export interface ReadingSession {
+  id: number;
+  bookId: number;
+  loggedAt: string; // ISO timestamp
+  fromPage: number;
+  toPage: number;
+}
