@@ -1,9 +1,12 @@
 import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
+import { notify } from '../../lib/alert';
 import { getAllBooks, getAllSessions } from '../../lib/db';
+import { shareFile } from '../../lib/share';
 import { pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
@@ -51,6 +54,7 @@ export default function Recap() {
   const y = Number(year);
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
+  const shareCardRef = useRef<View>(null);
 
   useEffect(() => {
     getAllBooks(db).then((all) =>
@@ -96,6 +100,24 @@ export default function Recap() {
   }
   const maxQ = Math.max(...quarters, 1);
 
+  async function handleShare() {
+    try {
+      const capture = await captureRef(shareCardRef, {
+        format: 'png',
+        quality: 1,
+        result: Platform.OS === 'web' ? 'base64' : 'tmpfile',
+      });
+      const filename = `bookmarked-${y}-recap.png`;
+      if (Platform.OS === 'web') {
+        await shareFile({ base64: capture, filename, mimeType: 'image/png', dialogTitle: `Share ${y} recap` });
+      } else {
+        await shareFile({ uri: capture, filename, mimeType: 'image/png', dialogTitle: `Share ${y} recap` });
+      }
+    } catch {
+      notify('Share failed', 'Could not create the recap image.');
+    }
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: `${y} in books` }} />
@@ -107,26 +129,32 @@ export default function Recap() {
           <Text style={styles.emptyText}>No books finished in {y} yet.</Text>
         ) : (
           <>
-            <View style={styles.cardRow}>
-              <StatCard label="Books finished" value={String(books.length)} />
-              <StatCard label="Pages read" value={String(pages)} />
-              <StatCard label="Avg rating" value={String(avgRating)} />
+            <View ref={shareCardRef} collapsable={false} style={styles.shareCard}>
+              <View style={styles.cardRow}>
+                <StatCard label="Books finished" value={String(books.length)} />
+                <StatCard label="Pages read" value={String(pages)} />
+                <StatCard label="Avg rating" value={String(avgRating)} />
+              </View>
+
+              {topRated && (
+                <HighlightRow
+                  label="Top rated"
+                  book={topRated}
+                  note={`★ ${topRated.rating}/10`}
+                />
+              )}
+              {fastest && (
+                <HighlightRow
+                  label="Fastest read"
+                  book={fastest}
+                  note={`${daysBetween(fastest.startedAt!, fastest.finishedAt!)} days`}
+                />
+              )}
             </View>
 
-            {topRated && (
-              <HighlightRow
-                label="Top rated"
-                book={topRated}
-                note={`★ ${topRated.rating}/10`}
-              />
-            )}
-            {fastest && (
-              <HighlightRow
-                label="Fastest read"
-                book={fastest}
-                note={`${daysBetween(fastest.startedAt!, fastest.finishedAt!)} days`}
-              />
-            )}
+            <Pressable style={styles.shareBtn} onPress={handleShare}>
+              <Text style={styles.shareBtnText}>Share {y} recap</Text>
+            </Pressable>
 
             <Text style={styles.subheading}>By quarter</Text>
             <View style={styles.quarters}>
@@ -173,6 +201,15 @@ export default function Recap() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  shareCard: { backgroundColor: colors.bg },
+  shareBtn: {
+    backgroundColor: colors.green,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  shareBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
   cardRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   card: {
     flex: 1,

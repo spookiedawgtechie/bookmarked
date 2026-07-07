@@ -1,8 +1,8 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
+import { shareFile } from './share';
 
 // Full-library JSON dump. On web this doubles as insurance against Safari
 // evicting site storage; on Android it's a general backup you can save anywhere.
@@ -28,29 +28,12 @@ export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
 
   const fileName = `bookmarked-backup-${new Date().toISOString().slice(0, 10)}.json`;
 
-  if (Platform.OS === 'web') {
-    // On mobile browsers (iOS PWA especially) sharing a real File keeps the
-    // .json name and type; anchor download is the desktop fallback.
-    const file = new File([payload], fileName, { type: 'application/json' });
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Bookmarked backup' });
-    } else {
-      const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  } else {
-    // Share an actual .json file, not a text message.
-    const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
-    await FileSystem.writeAsStringAsync(fileUri, payload);
-    await Sharing.shareAsync(fileUri, {
-      mimeType: 'application/json',
-      dialogTitle: 'Export Bookmarked backup',
-    });
-  }
+  await shareFile({
+    content: payload,
+    filename: fileName,
+    mimeType: 'application/json',
+    dialogTitle: 'Export Bookmarked backup',
+  });
 }
 
 // Restores a backup produced by exportLibrary. Books are matched by their
