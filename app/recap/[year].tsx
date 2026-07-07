@@ -7,13 +7,45 @@ import { captureRef } from 'react-native-view-shot';
 import { notify } from '../../lib/alert';
 import { getAllBooks, getAllSessions } from '../../lib/db';
 import { shareFile } from '../../lib/share';
-import { pagesInYear } from '../../lib/stats';
+import { dailyPagesInYear, dateKey, pagesByMonth, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
+
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+const HEATMAP_OPACITIES = [0.25, 0.45, 0.65, 0.85, 1.0];
 
 function daysBetween(startIso: string, endIso: string): number {
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
   return Math.max(1, Math.round(ms / 86400000));
+}
+
+type HeatmapCell = { key: string; pages: number } | null;
+
+// One entry per week (Sun-Sat) from the Sunday on/before Jan 1 through the
+// week containing Dec 31. Cells from the adjacent year are null padding,
+// matching GitHub's own contribution-graph layout.
+function buildHeatmapWeeks(year: number, dailyPages: Record<string, number>): HeatmapCell[][] {
+  const dec31 = new Date(year, 11, 31);
+  const cursor = new Date(year, 0, 1);
+  cursor.setDate(cursor.getDate() - cursor.getDay());
+  const weeks: HeatmapCell[][] = [];
+  while (cursor <= dec31) {
+    const week: HeatmapCell[] = [];
+    for (let i = 0; i < 7; i++) {
+      if (cursor.getFullYear() === year) {
+        const key = dateKey(cursor);
+        week.push({ key, pages: dailyPages[key] ?? 0 });
+      } else {
+        week.push(null);
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -55,6 +87,7 @@ export default function Recap() {
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const shareCardRef = useRef<View>(null);
+  const heatmapScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     getAllBooks(db).then((all) =>
@@ -100,6 +133,26 @@ export default function Recap() {
   }
   const maxQ = Math.max(...quarters, 1);
 
+  const withPages = books.filter((b) => b.totalPages !== null);
+  const longest =
+    withPages.length > 0
+      ? withPages.reduce((best, b) => (b.totalPages! > best.totalPages! ? b : best))
+      : null;
+  const avgDaysPerBook =
+    timed.length > 0
+      ? Math.round(
+          timed.reduce((sum, b) => sum + daysBetween(b.startedAt!, b.finishedAt!), 0) /
+            timed.length
+        )
+      : null;
+
+  const hasSessionsThisYear = sessions.some((s) => new Date(s.loggedAt).getFullYear() === y);
+  const months = pagesByMonth(sessions, y);
+  const maxMonth = Math.max(...months, 1);
+  const dailyPages = dailyPagesInYear(sessions, y);
+  const maxDaily = Math.max(...Object.values(dailyPages), 1);
+  const heatmapWeeks = buildHeatmapWeeks(y, dailyPages);
+
   async function handleShare() {
     try {
       const capture = await captureRef(shareCardRef, {
@@ -125,15 +178,26 @@ export default function Recap() {
         style={styles.screen}
         contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
       >
-        {books.length === 0 ? (
-          <Text style={styles.emptyText}>No books finished in {y} yet.</Text>
-        ) : (
+        {books.length === 0 && !hasSessionsThisYear && (
+          <Text style={styles.emptyText}>Nothing tracked in {y} yet.</Text>
+        )}
+
+        {books.length > 0 && (
           <>
             <View ref={shareCardRef} collapsable={false} style={styles.shareCard}>
+              <Text style={styles.brandLabel}>BOOKMARKED</Text>
+              <Text style={styles.yearHeading}>{y}</Text>
+
               <View style={styles.cardRow}>
                 <StatCard label="Books finished" value={String(books.length)} />
                 <StatCard label="Pages read" value={String(pages)} />
+              </View>
+              <View style={styles.cardRow}>
                 <StatCard label="Avg rating" value={String(avgRating)} />
+                <StatCard
+                  label="Avg days/book"
+                  value={avgDaysPerBook !== null ? String(avgDaysPerBook) : '–'}
+                />
               </View>
 
               {topRated && (
@@ -148,6 +212,13 @@ export default function Recap() {
                   label="Fastest read"
                   book={fastest}
                   note={`${daysBetween(fastest.startedAt!, fastest.finishedAt!)} days`}
+                />
+              )}
+              {longest && (
+                <HighlightRow
+                  label="Longest read"
+                  book={longest}
+                  note={`${longest.totalPages} pages`}
                 />
               )}
             </View>
@@ -173,7 +244,84 @@ export default function Recap() {
                 </View>
               ))}
             </View>
+          </>
+        )}
 
+        {hasSessionsThisYear && (
+          <>
+            <Text style={styles.subheading}>By month</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.months}>
+                {months.map((count, i) => (
+                  <View key={i} style={styles.monthCol}>
+                    <View style={styles.barTrack}>
+                      <View
+                        style={[
+                          styles.barFill,
+                          { height: `${Math.max((count / maxMonth) * 100, count > 0 ? 8 : 0)}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.quarterCount}>{count}</Text>
+                    <Text style={styles.quarterLabel}>{MONTH_LABELS[i]}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+
+            <Text style={styles.subheading}>Reading heatmap</Text>
+            <ScrollView
+              ref={heatmapScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              onContentSizeChange={() => heatmapScrollRef.current?.scrollToEnd({ animated: false })}
+            >
+              <View style={styles.heatmapGrid}>
+                {heatmapWeeks.map((week, wi) => (
+                  <View key={wi} style={styles.heatmapWeekCol}>
+                    {week.map((cell, di) => {
+                      if (cell === null) {
+                        return <View key={di} style={[styles.heatmapCell, styles.heatmapCellPad]} />;
+                      }
+                      if (cell.pages === 0) {
+                        return (
+                          <View
+                            key={di}
+                            style={[styles.heatmapCell, { backgroundColor: colors.border }]}
+                          />
+                        );
+                      }
+                      const bucket = Math.min(4, Math.floor((cell.pages / maxDaily) * 5));
+                      return (
+                        <View
+                          key={di}
+                          style={[
+                            styles.heatmapCell,
+                            { backgroundColor: colors.green, opacity: HEATMAP_OPACITIES[bucket] },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+            <View style={styles.legendRow}>
+              <Text style={styles.legendText}>Less</Text>
+              <View style={[styles.legendSwatch, { backgroundColor: colors.border }]} />
+              {HEATMAP_OPACITIES.map((op, i) => (
+                <View
+                  key={i}
+                  style={[styles.legendSwatch, { backgroundColor: colors.green, opacity: op }]}
+                />
+              ))}
+              <Text style={styles.legendText}>More</Text>
+            </View>
+          </>
+        )}
+
+        {books.length > 0 && (
+          <>
             <Text style={styles.subheading}>Everything you finished</Text>
             {books.map((b) => (
               <Link
@@ -201,7 +349,37 @@ export default function Recap() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  shareCard: { backgroundColor: colors.bg },
+  shareCard: { backgroundColor: colors.bg, paddingVertical: 8 },
+  brandLabel: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  yearHeading: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  months: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12, padding: 16, gap: 14 },
+  monthCol: { width: 30, alignItems: 'center' },
+  heatmapGrid: { flexDirection: 'row', gap: 3, backgroundColor: colors.card, borderRadius: 12, padding: 16 },
+  heatmapWeekCol: { flexDirection: 'column', gap: 3 },
+  heatmapCell: { width: 11, height: 11, borderRadius: 2 },
+  heatmapCellPad: { backgroundColor: 'transparent' },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 8,
+  },
+  legendText: { color: colors.textDim, fontSize: 11 },
+  legendSwatch: { width: 11, height: 11, borderRadius: 2 },
   shareBtn: {
     backgroundColor: colors.green,
     borderRadius: 8,

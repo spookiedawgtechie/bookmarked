@@ -5,7 +5,7 @@ function sessionPages(s: ReadingSession): number {
   return Math.max(0, s.toPage - s.fromPage);
 }
 
-function dateKey(d: Date): string {
+export function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -24,6 +24,37 @@ export function pagesInLastDays(sessions: ReadingSession[], days: number): numbe
   return sessions
     .filter((s) => new Date(s.loggedAt).getTime() >= cutoff)
     .reduce((sum, s) => sum + sessionPages(s), 0);
+}
+
+// Pages per calendar month (index 0 = January) for the given year — the
+// activity story behind the existing "By quarter" chart, which counts books
+// FINISHED per quarter (a different metric, not replaced by this).
+export function pagesByMonth(sessions: ReadingSession[], year: number): number[] {
+  const months = Array(12).fill(0);
+  for (const s of sessions) {
+    const d = new Date(s.loggedAt);
+    if (d.getFullYear() === year) {
+      months[d.getMonth()] += sessionPages(s);
+    }
+  }
+  return months;
+}
+
+// Pages per calendar day for the given year, keyed by dateKey — the raw
+// material for a GitHub-style reading heatmap.
+export function dailyPagesInYear(
+  sessions: ReadingSession[],
+  year: number
+): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const s of sessions) {
+    const d = new Date(s.loggedAt);
+    if (d.getFullYear() === year) {
+      const key = dateKey(d);
+      result[key] = (result[key] ?? 0) + sessionPages(s);
+    }
+  }
+  return result;
 }
 
 // Consecutive calendar days, ending today or yesterday, with at least one
