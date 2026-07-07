@@ -22,7 +22,7 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 
 1. ~~**Reading sessions & streaks**~~ — **shipped.** `sessions` table, `logProgress` as the single write path, one-time backfill for pre-existing progress, `lib/stats.ts` for pace/streak/pagesInYear, streak+weekly-pace on the Shelf header, backup export/import extended. See the `database` skill for the full shape. Not yet built from this unlock: a GitHub-style reading heatmap — left for recap upgrades (item 2 below) since it's a visualization, not a data-model change.
 2. **Recap upgrades**: shareable Wrapped-style image card (render a view to image → share sheet), month strip, longest book, avg days-per-book, and the reading heatmap noted above (data is already there via `sessions`).
-3. **Discover tab (recommendations)** — deliberately parked; considered a big overhaul. Agreed design: prerequisite `subjects` column (JSON array fetched with the description from the work JSON — same request, extra field, plus lazy backfill). Taste profile = rating-weighted subject counts from read/reading books. Candidates from `/subjects/<top-subjects>.json`, minus owned `ol_key`s, scored by weighted subject overlap. Three tiers: "More of the same" (same author or top-band overlap), "Similar territory" (moderate overlap, new authors), "A step forward" (fewer shared subjects + rarer/older/canonical works). All scoring in a new pure `lib/recommend.ts`; results cached in a table, recomputed on shelf change or pull-to-refresh; every card shows "because you read X". This is also the owner's intended M.Tech-adjacent project — v2 would swap heuristics for embeddings; keep the scoring file swappable.
+3. **Discover tab (recommendations)** — **claimed by the owner as his own project (2026-07-06); do not build or modify `lib/recommend.ts` / a Discover tab unless he explicitly asks.** This is intentionally his hands-on M.Tech-adjacent work, not a delegated task. Design context kept here for reference only, in case he asks for review or a second opinion: prerequisite `subjects` column (JSON array fetched with the description from the work JSON — same request, extra field, plus lazy backfill). Taste profile = rating-weighted subject counts from read/reading books. Candidates from `/subjects/<top-subjects>.json`, minus owned `ol_key`s, scored by weighted subject overlap. Three tiers: "More of the same" (same author or top-band overlap), "Similar territory" (moderate overlap, new authors), "A step forward" (fewer shared subjects + rarer/older/canonical works). Heuristics first, embeddings later.
 4. Quality of life: sort/filter on list screens, separate notes field, vector icons for tabs.
 
 ## Explicitly rejected
@@ -31,6 +31,6 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 
 ## Operational facts
 
-- Repo is local-only (no GitHub remote) — commits are the only safety net; commit often.
+- Repo has a GitHub remote (`github.com/spookiedawgtechie/bookmarked`, pushed 2026-07-06) — but still commit often; push isn't automatic.
 - EAS free tier ~30 builds/month — batch changes before rebuilding when practical.
 - Owner's real library lives in the installed APK; Expo Go and each browser hold separate databases; JSON export/import (Stats) is the migration path between any two.
