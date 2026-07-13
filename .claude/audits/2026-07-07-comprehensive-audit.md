@@ -61,6 +61,8 @@ Quick wins (<~15 lines each): M2 guard, M7 persist(), M8 timeouts, AbortError sw
 
 ## Remediation log
 
+- 2026-07-13: polish batch + M7 (commit 39d1716) — L3, L4, L6, L7, L8, L9, M7 fixed. Owner verified storage persistence and date formats himself; grid resize (L7) owner-verification deferred but formula-verified live in browser. All Mediums closed except M6 (multi-tab experiment pending).
+
 - 2026-07-07, blocks 1–3 (commits 8c229d5, 8fc47fd, +block-3 commit): M1–M5, M8, L1, L11 all fixed and verified (tsc, android bundle, web smoke test incl. live confirm-dialog and search-flow checks). **Both release gates cleared** — next APK/PWA ship is unblocked whenever the owner asks (standing rule: never build/deploy unless explicitly requested). Remaining open: H1/H2 a11y pass, M6/M7/L12 web hardening, polish batch (L2–L10), I-items.
 
 ## Release verdict at audit time
