@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { captureRef } from 'react-native-view-shot';
 import { notify } from '../../lib/alert';
 import { getAllBooks, getAllSessions } from '../../lib/db';
+import { formatDateShort, plural } from '../../lib/format';
 import { shareFile } from '../../lib/share';
 import { dailyPagesInYear, dateKey, pagesByMonth, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
@@ -171,6 +172,19 @@ export default function Recap() {
     }
   }
 
+  // Typed/mistyped deep links land here with a non-numeric year — show a
+  // sane message instead of "NaN in books" over a permanent empty state.
+  if (!Number.isFinite(y)) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Recap' }} />
+        <View style={styles.screen}>
+          <Text style={styles.emptyText}>That's not a year I recognize.</Text>
+        </View>
+      </>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: `${y} in books` }} />
@@ -211,7 +225,7 @@ export default function Recap() {
                 <HighlightRow
                   label="Fastest read"
                   book={fastest}
-                  note={`${daysBetween(fastest.startedAt!, fastest.finishedAt!)} days`}
+                  note={plural(daysBetween(fastest.startedAt!, fastest.finishedAt!), 'day')}
                 />
               )}
               {longest && (
@@ -330,7 +344,7 @@ export default function Recap() {
                 asChild
               >
                 <Pressable style={styles.bookRow}>
-                  <Text style={styles.bookRowDate}>{b.finishedAt!.slice(5, 10)}</Text>
+                  <Text style={styles.bookRowDate}>{formatDateShort(b.finishedAt!)}</Text>
                   <Text style={styles.bookRowTitle} numberOfLines={1}>
                     {b.title}
                   </Text>
@@ -387,7 +401,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
-  shareBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  shareBtnText: { color: colors.onAccent, fontWeight: '700', fontSize: 14 },
   cardRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   card: {
     flex: 1,
@@ -455,7 +469,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 10,
   },
-  bookRowDate: { color: colors.textDim, fontSize: 12, fontVariant: ['tabular-nums'] },
+  bookRowDate: { color: colors.textDim, fontSize: 12, fontVariant: ['tabular-nums'], minWidth: 42 },
   bookRowTitle: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 },
   bookRowRating: { color: colors.orange, fontSize: 13, fontWeight: '700' },
   emptyText: { color: colors.textDim, fontSize: 14, textAlign: 'center', marginTop: 60 },

@@ -28,6 +28,7 @@ import {
   setTotalPages,
 } from '../../lib/db';
 import { confirmDialog, notify } from '../../lib/alert';
+import { formatDate } from '../../lib/format';
 import { coverUrl, fetchCoverIds, fetchDescription } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
 import type { Book, BookStatus } from '../../lib/types';
@@ -43,6 +44,7 @@ export default function BookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
   const [book, setBook] = useState<Book | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [pagesInput, setPagesInput] = useState('');
   const [reviewDraft, setReviewDraft] = useState('');
   const [page, setPage] = useState(0);
@@ -65,6 +67,7 @@ export default function BookDetail() {
   const reload = useCallback(async () => {
     const b = await getBook(db, bookId);
     setBook(b);
+    setNotFound(b === null);
     if (b) {
       setPage(b.currentPage);
       persistedPageRef.current = b.currentPage;
@@ -96,7 +99,16 @@ export default function BookDetail() {
     };
   }, [db, bookId, book, reload]);
 
-  if (!book) return <View style={styles.screen} />;
+  if (!book) {
+    // Distinguish "still loading" (blank) from "no such book" (bad deep
+    // link / deleted id) — previously both were a permanent blank screen.
+    return (
+      <View style={styles.screen}>
+        <Stack.Screen options={{ title: '' }} />
+        {notFound && <Text style={styles.notFoundText}>Book not found.</Text>}
+      </View>
+    );
+  }
 
   const pct =
     book.totalPages && book.totalPages > 0
@@ -246,7 +258,9 @@ export default function BookDetail() {
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>{book.title}</Text>
-            <Text style={styles.author}>{book.author}</Text>
+            <Text style={styles.author} numberOfLines={2}>
+              {book.author}
+            </Text>
             {book.totalPages && <Text style={styles.meta}>{book.totalPages} pages</Text>}
           </View>
         </View>
@@ -260,7 +274,7 @@ export default function BookDetail() {
                 style={[styles.statusBtn, active && { backgroundColor: s.accent }]}
                 onPress={() => onStatus(s.value)}
               >
-                <Text style={[styles.statusBtnText, active && { color: '#000' }]}>
+                <Text style={[styles.statusBtnText, active && { color: colors.onAccent }]}>
                   {s.label}
                 </Text>
               </Pressable>
@@ -345,7 +359,7 @@ export default function BookDetail() {
           <View style={styles.block}>
             <Text style={styles.blockLabel}>Finished on</Text>
             <Text style={styles.progressText}>
-              {book.finishedAt ? book.finishedAt.slice(0, 10) : 'Unknown'}
+              {book.finishedAt ? formatDate(book.finishedAt) : 'Unknown'}
             </Text>
             <Text style={styles.hint}>
               Read this one years ago? Enter the real date — recaps and stats use it.
@@ -438,7 +452,7 @@ const styles = StyleSheet.create({
   },
   pickerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   pickerCard: {
@@ -512,7 +526,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
   },
-  saveBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  saveBtnText: { color: colors.onAccent, fontWeight: '700', fontSize: 14 },
   deleteBtn: { marginTop: 28, alignItems: 'center' },
-  deleteBtnText: { color: '#E5534B', fontSize: 14, fontWeight: '600' },
+  deleteBtnText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
+  notFoundText: { color: colors.textDim, fontSize: 14, textAlign: 'center', marginTop: 60 },
 });

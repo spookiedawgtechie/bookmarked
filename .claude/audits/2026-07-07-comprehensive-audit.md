@@ -25,17 +25,17 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 | M4 | Med | Reliability | stats.tsx export onPress, search onAdd, all [id].tsx write handlers, `share.ts` | Unhandled rejections; canceling web share ALWAYS rejects with AbortError (unhandled); recap handleShare reports user-cancel as "Share failed" | FIXED (AbortError swallow + notify() on all writes; 8fc47fd) |
 | M5 | Med | Reliability | importLibrary, deleteBook | No transactions — partial import / orphaned state on interruption; slow row-by-row import | FIXED (withTransactionAsync; 8c229d5) |
 | M6 | Med | Reliability | web/OPFS | Multi-tab PWA behavior undefined on alpha sqlite-wasm; test two tabs writing before adding guards | NEEDS VERIFICATION |
-| M7 | Med | Reliability | web startup | `navigator.storage.persist()` never called — eviction risk higher than necessary; one-line fix | OPEN |
+| M7 | Med | Reliability | web startup | `navigator.storage.persist()` never called — eviction risk higher than necessary; one-line fix | FIXED (requested on web boot in _layout; grant is browser's call) |
 | M8 | Med | Reliability | `openlibrary.ts` ×3 | No fetch timeouts → infinite spinners on dead networks (search/description/covers) | FIXED (fetchWithTimeout 10s; block 3) |
 | L1 | Low | Reliability | `[id].tsx` desc effect | Transient OL 5xx caches `''` sentinel permanently (fetchDescription returns null on any !ok; should 404-only) | FIXED (404-only null, else throw; block 3) |
 | L2 | Low | Race | `[id].tsx` timers | Debounce timers not cleaned on unmount; write lands after back-nav → stale Shelf until next focus. Fix = flush-on-unmount, not cancel | OPEN |
-| L3 | Low | Copy | recap fastest note | "1 days" — missing pluralization (year strip does it right) | OPEN |
-| L4 | Low | Consistency | `[id].tsx:deleteBtnText` + 5 files | Hardcoded hex outside theme: `#E5534B`, `#000`-on-green, rgba overlays → add danger/onAccent/overlay tokens | OPEN |
+| L3 | Low | Copy | recap fastest note | "1 days" — missing pluralization (year strip does it right) | FIXED (plural() helper in lib/format.ts) |
+| L4 | Low | Consistency | `[id].tsx:deleteBtnText` + 5 files | Hardcoded hex outside theme: `#E5534B`, `#000`-on-green, rgba overlays → add danger/onAccent/overlay tokens | FIXED (danger/onAccent/overlay/badgeBg tokens; all screens swept) |
 | L5 | Low | Visual/A11y | `(tabs)/_layout.tsx` | Tab emoji renders doubled on web ("📚 📚 Shelf"); SRs announce twice | OPEN |
-| L6 | Low | Consistency | recap list vs detail | Date formats: "07-07" (MM-DD) vs "YYYY-MM-DD"; no locale; add one formatDate helper | OPEN |
-| L7 | Low | Visual | `index.tsx:24`, `list/[status].tsx:13` | `Dimensions.get` at module scope — stale on web resize (native safe: portrait-locked). Use `useWindowDimensions` | OPEN |
-| L8 | Low | Visual | `[id].tsx` author | No numberOfLines — multi-author books wrap unbounded | OPEN |
-| L9 | Low | Reliability | recap/[year], book/[id] | `/recap/abc` → "NaN in books"; `/book/999` → permanent blank (no not-found state) | OPEN |
+| L6 | Low | Consistency | recap list vs detail | Date formats: "07-07" (MM-DD) vs "YYYY-MM-DD"; no locale; add one formatDate helper | FIXED (lib/format.ts formatDate/formatDateShort) |
+| L7 | Low | Visual | `index.tsx:24`, `list/[status].tsx:13` | `Dimensions.get` at module scope — stale on web resize (native safe: portrait-locked). Use `useWindowDimensions` | FIXED (useWindowDimensions, sizes verified against formula live) |
+| L8 | Low | Visual | `[id].tsx` author | No numberOfLines — multi-author books wrap unbounded | FIXED (numberOfLines=2) |
+| L9 | Low | Reliability | recap/[year], book/[id] | `/recap/abc` → "NaN in books"; `/book/999` → permanent blank (no not-found state) | FIXED (year guard + Book-not-found state, both verified live) |
 | L10 | Low | Accessibility | 11px text sites | Legibility + font-scaling may clip fixed-height bars/cards; test at 1.3× scale | OPEN |
 | L11 | Low | Reliability/UX | stats.tsx import | No confirm before import's documented blind overwrite; `confirmDialog` already exists — use it | FIXED (confirmDialog gate; 8fc47fd) |
 | L12 | Low | Security | vercel.json | No CSP/XCTO/Referrer-Policy (only COOP/COEP, verified live). Defense-in-depth only — CSP needs `wasm-unsafe-eval` + OL hosts, verify on preview first | OPEN |

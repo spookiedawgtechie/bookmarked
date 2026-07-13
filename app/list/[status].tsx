@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getAllBooks } from '../../lib/db';
 import { colors } from '../../lib/theme';
@@ -10,10 +10,6 @@ import type { Book } from '../../lib/types';
 
 const GRID_COLS = 4;
 const GRID_GAP = 10;
-const COVER_W = Math.floor(
-  (Dimensions.get('window').width - 32 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS
-);
-const COVER_H = Math.floor(COVER_W * 1.5);
 
 const TITLES: Record<string, string> = {
   want: 'Want to Read',
@@ -24,6 +20,11 @@ export default function StatusList() {
   const db = useSQLiteContext();
   const { status } = useLocalSearchParams<{ status: string }>();
   const [books, setBooks] = useState<Book[]>([]);
+  // Computed from live window size (not module-scope Dimensions.get) so
+  // web resizes and orientation changes recompute the grid.
+  const { width } = useWindowDimensions();
+  const coverW = Math.floor((width - 32 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
+  const coverSize = { width: coverW, height: Math.floor(coverW * 1.5) };
 
   useFocusEffect(
     useCallback(() => {
@@ -53,9 +54,13 @@ export default function StatusList() {
             >
               <Pressable>
                 {b.coverUrl ? (
-                  <Image source={{ uri: b.coverUrl }} style={styles.cover} contentFit="cover" />
+                  <Image
+                    source={{ uri: b.coverUrl }}
+                    style={[styles.cover, coverSize]}
+                    contentFit="cover"
+                  />
                 ) : (
-                  <View style={[styles.cover, styles.placeholder]}>
+                  <View style={[styles.cover, styles.placeholder, coverSize]}>
                     <Text style={styles.placeholderText} numberOfLines={4}>
                       {b.title}
                     </Text>
@@ -80,8 +85,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   cover: {
-    width: COVER_W,
-    height: COVER_H,
     borderRadius: 6,
     backgroundColor: colors.card,
   },
@@ -102,7 +105,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 4,
     right: 4,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: colors.badgeBg,
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 1,

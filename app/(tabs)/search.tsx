@@ -191,5 +191,5 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   addBtnOwned: { backgroundColor: colors.border },
-  addBtnText: { color: '#000', fontSize: 20, fontWeight: '700', lineHeight: 24 },
+  addBtnText: { color: colors.onAccent, fontSize: 20, fontWeight: '700', lineHeight: 24 },
 });

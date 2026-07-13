@@ -4,13 +4,13 @@ import { Link, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import {
-  Dimensions,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { notify } from '../../lib/alert';
 import { getAllBooks, getAllSessions, logProgress, setStatus } from '../../lib/db';
@@ -21,13 +21,18 @@ import type { Book, ReadingSession } from '../../lib/types';
 const GRID_COLS = 4;
 const GRID_GAP = 10;
 // Home rows sit inside cards (screen padding 16 + card padding 12 per side),
-// so thumbs are sized to fill the card interior exactly.
+// so thumbs are sized to fill the card interior exactly. Sizes come from
+// useWindowDimensions (not module-scope Dimensions.get) so web resizes and
+// orientation changes recompute the grid.
 const CARD_PAD = 12;
-const COVER_W = Math.floor(
-  (Dimensions.get('window').width - 32 - CARD_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) /
-    GRID_COLS
-);
-const COVER_H = Math.floor(COVER_W * 1.5);
+
+function useCoverSize() {
+  const { width } = useWindowDimensions();
+  const coverW = Math.floor(
+    (width - 32 - CARD_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS
+  );
+  return { width: coverW, height: Math.floor(coverW * 1.5) };
+}
 
 function progressPct(book: Book): number | null {
   if (!book.totalPages || book.totalPages <= 0) return null;
@@ -35,13 +40,18 @@ function progressPct(book: Book): number | null {
 }
 
 function CoverThumb({ book, showRating }: { book: Book; showRating?: boolean }) {
+  const coverSize = useCoverSize();
   return (
     <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
       <Pressable>
         {book.coverUrl ? (
-          <Image source={{ uri: book.coverUrl }} style={styles.thumb} contentFit="cover" />
+          <Image
+            source={{ uri: book.coverUrl }}
+            style={[styles.thumb, coverSize]}
+            contentFit="cover"
+          />
         ) : (
-          <View style={[styles.thumb, styles.thumbPlaceholder]}>
+          <View style={[styles.thumb, styles.thumbPlaceholder, coverSize]}>
             <Text style={styles.thumbPlaceholderText} numberOfLines={4}>
               {book.title}
             </Text>
@@ -343,7 +353,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 10,
   },
-  logBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
+  logBtnText: { color: colors.onAccent, fontWeight: '700', fontSize: 13 },
   rowCard: {
     flexDirection: 'row',
     gap: GRID_GAP,
@@ -352,8 +362,6 @@ const styles = StyleSheet.create({
     padding: CARD_PAD,
   },
   thumb: {
-    width: COVER_W,
-    height: COVER_H,
     borderRadius: 6,
     backgroundColor: colors.card,
   },
@@ -374,7 +382,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 4,
     right: 4,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: colors.badgeBg,
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 1,
@@ -394,7 +402,7 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.textDim, fontSize: 14, marginTop: 8, textAlign: 'center' },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modalCard: {
@@ -423,5 +431,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  modalSaveText: { color: '#000', fontWeight: '700' },
+  modalSaveText: { color: colors.onAccent, fontWeight: '700' },
 });

@@ -8,4 +8,8 @@ export const colors = {
   green: '#00E054',
   blue: '#40BCF4',
   orange: '#FF8000',
+  danger: '#E5534B', // destructive actions (remove book)
+  onAccent: '#000000', // text on green/blue/orange fills
+  overlay: 'rgba(0,0,0,0.6)', // modal backdrops
+  badgeBg: 'rgba(0,0,0,0.75)', // rating badges over covers
 };
