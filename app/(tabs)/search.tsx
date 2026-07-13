@@ -37,19 +37,32 @@ export default function Search() {
     if (q.length < 3) {
       setResults([]);
       setError(null);
+      setLoading(false);
       return;
     }
     setLoading(true);
+    // The cancelled flag (not just the timer clear) prevents an in-flight
+    // response for an OLD query from overwriting results of a newer one —
+    // out-of-order resolution is routine on slow connections.
+    let cancelled = false;
     const timer = setTimeout(() => {
       searchBooks(q)
         .then((r) => {
+          if (cancelled) return;
           setResults(r);
           setError(null);
         })
-        .catch(() => setError('Search failed. Check your connection.'))
-        .finally(() => setLoading(false));
+        .catch(() => {
+          if (!cancelled) setError('Search failed. Check your connection.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     }, 500);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [query]);
 
   async function onAdd(item: SearchResult) {

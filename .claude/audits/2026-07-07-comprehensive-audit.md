@@ -19,15 +19,15 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 |---|---|---|---|---|---|
 | H1 | High | Accessibility | `index.tsx` CoverThumb, `list/[status].tsx` | Cover-only grids: image-only Pressables, no accessibilityLabel/alt — shelves unusable with screen readers | OPEN |
 | H2 | High | Accessibility | app-wide | No accessible names anywhere: +/✓/✕ buttons, unlabeled sliders (bare `input[type=range]` on web), heatmap = ~370 empty views, no disabled-state conveyance | OPEN |
-| M1 | Med | Race | `search.tsx:34-52` | Debounce cleanup clears timer only; in-flight fetch not aborted → stale out-of-order results overwrite newer | OPEN |
-| M2 | Med | Race/Data | `index.tsx` saveLog | Double-tap Save = duplicate session rows (UNIQUE includes ms timestamp) → inflated page stats/streaks. **Fix before next release** | OPEN |
-| M3 | Med | Security/Reliability | `backup.ts` importLibrary | Only ol_key/title type-checked; bad `status` → book vanishes from all shelves; string `rating` → string-concat avg; bad `total_pages` → NaN slider. **Fix before next release** | OPEN |
-| M4 | Med | Reliability | stats.tsx export onPress, search onAdd, all [id].tsx write handlers, `share.ts` | Unhandled rejections; canceling web share ALWAYS rejects with AbortError (unhandled); recap handleShare reports user-cancel as "Share failed" | OPEN |
-| M5 | Med | Reliability | importLibrary, deleteBook | No transactions — partial import / orphaned state on interruption; slow row-by-row import | OPEN |
+| M1 | Med | Race | `search.tsx:34-52` | Debounce cleanup clears timer only; in-flight fetch not aborted → stale out-of-order results overwrite newer | FIXED (cancelled-flag guard; block 3) |
+| M2 | Med | Race/Data | `index.tsx` saveLog | Double-tap Save = duplicate session rows (UNIQUE includes ms timestamp) → inflated page stats/streaks. **Fix before next release** | FIXED (saving guard + disabled btn; 8c229d5) |
+| M3 | Med | Security/Reliability | `backup.ts` importLibrary | Only ol_key/title type-checked; bad `status` → book vanishes from all shelves; string `rating` → string-concat avg; bad `total_pages` → NaN slider. **Fix before next release** | FIXED (per-field validators; 8c229d5) |
+| M4 | Med | Reliability | stats.tsx export onPress, search onAdd, all [id].tsx write handlers, `share.ts` | Unhandled rejections; canceling web share ALWAYS rejects with AbortError (unhandled); recap handleShare reports user-cancel as "Share failed" | FIXED (AbortError swallow + notify() on all writes; 8fc47fd) |
+| M5 | Med | Reliability | importLibrary, deleteBook | No transactions — partial import / orphaned state on interruption; slow row-by-row import | FIXED (withTransactionAsync; 8c229d5) |
 | M6 | Med | Reliability | web/OPFS | Multi-tab PWA behavior undefined on alpha sqlite-wasm; test two tabs writing before adding guards | NEEDS VERIFICATION |
 | M7 | Med | Reliability | web startup | `navigator.storage.persist()` never called — eviction risk higher than necessary; one-line fix | OPEN |
-| M8 | Med | Reliability | `openlibrary.ts` ×3 | No fetch timeouts → infinite spinners on dead networks (search/description/covers) | OPEN |
-| L1 | Low | Reliability | `[id].tsx` desc effect | Transient OL 5xx caches `''` sentinel permanently (fetchDescription returns null on any !ok; should 404-only) | OPEN |
+| M8 | Med | Reliability | `openlibrary.ts` ×3 | No fetch timeouts → infinite spinners on dead networks (search/description/covers) | FIXED (fetchWithTimeout 10s; block 3) |
+| L1 | Low | Reliability | `[id].tsx` desc effect | Transient OL 5xx caches `''` sentinel permanently (fetchDescription returns null on any !ok; should 404-only) | FIXED (404-only null, else throw; block 3) |
 | L2 | Low | Race | `[id].tsx` timers | Debounce timers not cleaned on unmount; write lands after back-nav → stale Shelf until next focus. Fix = flush-on-unmount, not cancel | OPEN |
 | L3 | Low | Copy | recap fastest note | "1 days" — missing pluralization (year strip does it right) | OPEN |
 | L4 | Low | Consistency | `[id].tsx:deleteBtnText` + 5 files | Hardcoded hex outside theme: `#E5534B`, `#000`-on-green, rgba overlays → add danger/onAccent/overlay tokens | OPEN |
@@ -37,7 +37,7 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 | L8 | Low | Visual | `[id].tsx` author | No numberOfLines — multi-author books wrap unbounded | OPEN |
 | L9 | Low | Reliability | recap/[year], book/[id] | `/recap/abc` → "NaN in books"; `/book/999` → permanent blank (no not-found state) | OPEN |
 | L10 | Low | Accessibility | 11px text sites | Legibility + font-scaling may clip fixed-height bars/cards; test at 1.3× scale | OPEN |
-| L11 | Low | Reliability/UX | stats.tsx import | No confirm before import's documented blind overwrite; `confirmDialog` already exists — use it | OPEN |
+| L11 | Low | Reliability/UX | stats.tsx import | No confirm before import's documented blind overwrite; `confirmDialog` already exists — use it | FIXED (confirmDialog gate; 8fc47fd) |
 | L12 | Low | Security | vercel.json | No CSP/XCTO/Referrer-Policy (only COOP/COEP, verified live). Defense-in-depth only — CSP needs `wasm-unsafe-eval` + OL hosts, verify on preview first | OPEN |
 | I1 | Info | Accessibility | web Modals | Focus trap/Escape/restore untested on RNW | NEEDS VERIFICATION |
 | I2 | Info | Consistency | stats vs recap | Two definitions of "Avg rating" (all rated books vs year's finished) | OPEN |
@@ -58,6 +58,10 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 6. Polish batch: L3, L4, L6, L7, L8, L9.
 
 Quick wins (<~15 lines each): M2 guard, M7 persist(), M8 timeouts, AbortError swallow, L1, L3, L8, L9, L11.
+
+## Remediation log
+
+- 2026-07-07, blocks 1–3 (commits 8c229d5, 8fc47fd, +block-3 commit): M1–M5, M8, L1, L11 all fixed and verified (tsc, android bundle, web smoke test incl. live confirm-dialog and search-flow checks). **Both release gates cleared** — next APK/PWA ship is unblocked whenever the owner asks (standing rule: never build/deploy unless explicitly requested). Remaining open: H1/H2 a11y pass, M6/M7/L12 web hardening, polish batch (L2–L10), I-items.
 
 ## Release verdict at audit time
 

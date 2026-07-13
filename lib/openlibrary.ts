@@ -20,10 +20,19 @@ export function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {
   return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg`;
 }
 
+// A dead network must produce an error the UI can show, not a spinner that
+// hangs for the platform's multi-minute default. (Manual controller instead
+// of AbortSignal.timeout for RN/Hermes compatibility.)
+function fetchWithTimeout(url: string, ms = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 // A work lists cover IDs from all its editions — the raw material for the
 // "pick the cover matching your physical copy" feature.
 export async function fetchCoverIds(olKey: string): Promise<number[]> {
-  const res = await fetch(`https://openlibrary.org${olKey}.json`);
+  const res = await fetchWithTimeout(`https://openlibrary.org${olKey}.json`);
   if (!res.ok) return [];
   const json = (await res.json()) as { covers?: number[] };
   return (json.covers ?? []).filter((id) => id > 0).slice(0, 30);
@@ -32,8 +41,12 @@ export async function fetchCoverIds(olKey: string): Promise<number[]> {
 // Work pages (e.g. /works/OL45883W) carry the book blurb; the field is either
 // a plain string or a { value } wrapper depending on the record.
 export async function fetchDescription(olKey: string): Promise<string | null> {
-  const res = await fetch(`https://openlibrary.org${olKey}.json`);
-  if (!res.ok) return null;
+  const res = await fetchWithTimeout(`https://openlibrary.org${olKey}.json`);
+  // null means "definitively no description" and gets cached as the ''
+  // sentinel by the caller; a transient server error must THROW instead,
+  // or one bad 500 would permanently suppress the book's blurb.
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Open Library returned ${res.status}`);
   const json = (await res.json()) as { description?: string | { value?: string } };
   const d = json.description;
   if (!d) return null;
@@ -45,7 +58,7 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
     'https://openlibrary.org/search.json?q=' +
     encodeURIComponent(query) +
     '&fields=key,title,author_name,cover_i,number_of_pages_median,first_publish_year&limit=25';
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`Open Library returned ${res.status}`);
   const json = (await res.json()) as { docs: OLDoc[] };
   return json.docs.map((d) => ({
