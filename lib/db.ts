@@ -241,6 +241,10 @@ export async function setFinishedDate(
 }
 
 export async function deleteBook(db: SQLiteDatabase, id: number): Promise<void> {
-  await db.runAsync('DELETE FROM sessions WHERE book_id = ?', id);
-  await db.runAsync('DELETE FROM books WHERE id = ?', id);
+  // One transaction: an interruption must not delete the history but keep
+  // the book (no FK cascade is declared, so atomicity lives here).
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM sessions WHERE book_id = ?', id);
+    await db.runAsync('DELETE FROM books WHERE id = ?', id);
+  });
 }

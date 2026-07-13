@@ -32,5 +32,5 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 ## Operational facts
 
 - Repo has a GitHub remote (`github.com/spookiedawgtechie/bookmarked`, pushed 2026-07-06) — but still commit often; push isn't automatic.
-- EAS free tier ~30 builds/month — batch changes before rebuilding when practical.
+- EAS free tier ~30 builds/month — batch changes before rebuilding when practical. **Standing rule (owner, 2026-07-07): NEVER queue an EAS build or deploy to Vercel unless he explicitly asks in that conversation.** He reviews changes via Expo Go; code + commit + push is the default definition of done.
 - Owner's real library lives in the installed APK; Expo Go and each browser hold separate databases; JSON export/import (Stats) is the migration path between any two.

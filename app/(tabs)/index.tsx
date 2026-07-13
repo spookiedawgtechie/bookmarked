@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { notify } from '../../lib/alert';
 import { getAllBooks, getAllSessions, logProgress, setStatus } from '../../lib/db';
 import { currentStreakDays, pagesInLastDays, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
@@ -122,6 +123,9 @@ export default function Shelf() {
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [logBook, setLogBook] = useState<Book | null>(null);
   const [logPage, setLogPage] = useState(0);
+  // Guards double-tap on Save: a second logProgress with the same stale
+  // fromPage would insert a duplicate session row and inflate page stats.
+  const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(() => {
     getAllBooks(db).then(setBooks);
@@ -154,13 +158,20 @@ export default function Shelf() {
   }
 
   async function saveLog() {
-    if (!logBook) return;
-    await logProgress(db, logBook.id, logBook.currentPage, logPage);
-    if (logBook.totalPages && logPage >= logBook.totalPages) {
-      await setStatus(db, logBook.id, 'read');
+    if (!logBook || saving) return;
+    setSaving(true);
+    try {
+      await logProgress(db, logBook.id, logBook.currentPage, logPage);
+      if (logBook.totalPages && logPage >= logBook.totalPages) {
+        await setStatus(db, logBook.id, 'read');
+      }
+      setLogBook(null);
+      refresh();
+    } catch {
+      notify('Save failed', 'Your progress was not saved. Try again.');
+    } finally {
+      setSaving(false);
     }
-    setLogBook(null);
-    refresh();
   }
 
   return (
@@ -264,8 +275,12 @@ export default function Shelf() {
                   <Pressable style={styles.modalCancel} onPress={() => setLogBook(null)}>
                     <Text style={styles.modalCancelText}>Cancel</Text>
                   </Pressable>
-                  <Pressable style={styles.modalSave} onPress={saveLog}>
-                    <Text style={styles.modalSaveText}>Save</Text>
+                  <Pressable
+                    style={[styles.modalSave, saving && { opacity: 0.5 }]}
+                    disabled={saving}
+                    onPress={saveLog}
+                  >
+                    <Text style={styles.modalSaveText}>{saving ? 'Saving…' : 'Save'}</Text>
                   </Pressable>
                 </View>
               </>
