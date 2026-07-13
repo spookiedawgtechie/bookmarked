@@ -24,7 +24,13 @@ export async function shareFile(input: {
       : await (await fetch(`data:${mimeType};base64,${base64}`)).blob();
     const file = new File([blob], filename, { type: mimeType });
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: dialogTitle });
+      try {
+        await navigator.share({ files: [file], title: dialogTitle });
+      } catch (e) {
+        // Dismissing the share sheet rejects with AbortError — the user
+        // canceling is not a failure and must not surface as one.
+        if ((e as Error)?.name !== 'AbortError') throw e;
+      }
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

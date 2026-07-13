@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { notify } from '../../lib/alert';
 import { addBook } from '../../lib/db';
 import { searchBooks, type SearchResult } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
@@ -52,14 +53,18 @@ export default function Search() {
   }, [query]);
 
   async function onAdd(item: SearchResult) {
-    await addBook(db, {
-      olKey: item.key,
-      title: item.title,
-      author: item.author,
-      coverUrl: item.coverUrl,
-      totalPages: item.pages,
-    });
-    refreshOwned();
+    try {
+      await addBook(db, {
+        olKey: item.key,
+        title: item.title,
+        author: item.author,
+        coverUrl: item.coverUrl,
+        totalPages: item.pages,
+      });
+      refreshOwned();
+    } catch {
+      notify('Add failed', 'Could not add the book. Try again.');
+    }
   }
 
   return (

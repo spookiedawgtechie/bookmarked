@@ -104,16 +104,24 @@ export default function BookDetail() {
       : null;
 
   async function onStatus(status: BookStatus) {
-    await setStatus(db, bookId, status);
-    reload();
+    try {
+      await setStatus(db, bookId, status);
+      reload();
+    } catch {
+      notify('Save failed', 'Could not update the status. Try again.');
+    }
   }
 
   async function onSavePages() {
     const n = parseInt(pagesInput, 10);
     if (!Number.isFinite(n) || n <= 0) return;
-    await setTotalPages(db, bookId, n);
-    setPagesInput('');
-    reload();
+    try {
+      await setTotalPages(db, bookId, n);
+      setPagesInput('');
+      reload();
+    } catch {
+      notify('Save failed', 'Could not save the page count. Try again.');
+    }
   }
 
   function onProgressChange(value: number) {
@@ -121,12 +129,16 @@ export default function BookDetail() {
     setPage(v);
     if (progressTimer.current) clearTimeout(progressTimer.current);
     progressTimer.current = setTimeout(async () => {
-      const from = persistedPageRef.current;
-      await logProgress(db, bookId, from, v);
-      persistedPageRef.current = v;
-      if (book && book.totalPages && v >= book.totalPages) {
-        await setStatus(db, bookId, 'read');
-        reload();
+      try {
+        const from = persistedPageRef.current;
+        await logProgress(db, bookId, from, v);
+        persistedPageRef.current = v;
+        if (book && book.totalPages && v >= book.totalPages) {
+          await setStatus(db, bookId, 'read');
+          reload();
+        }
+      } catch {
+        notify('Save failed', 'Your progress was not saved. Try again.');
       }
     }, 600);
   }
@@ -135,8 +147,12 @@ export default function BookDetail() {
     setRatingDraft(value);
     if (ratingTimer.current) clearTimeout(ratingTimer.current);
     ratingTimer.current = setTimeout(async () => {
-      await setRating(db, bookId, value === 0 ? null : value);
-      reload();
+      try {
+        await setRating(db, bookId, value === 0 ? null : value);
+        reload();
+      } catch {
+        notify('Save failed', 'Your rating was not saved. Try again.');
+      }
     }, 600);
   }
 
@@ -152,9 +168,13 @@ export default function BookDetail() {
   }
 
   async function onPickCover(coverId: number) {
-    await setCoverUrl(db, bookId, coverUrl(coverId, 'M'));
-    setCoverPickerOpen(false);
-    reload();
+    try {
+      await setCoverUrl(db, bookId, coverUrl(coverId, 'M'));
+      setCoverPickerOpen(false);
+      reload();
+    } catch {
+      notify('Save failed', 'Could not change the cover. Try again.');
+    }
   }
 
   async function onSaveFinished() {
@@ -168,20 +188,32 @@ export default function BookDetail() {
       notify('Invalid date', 'That date does not exist or is in the future.');
       return;
     }
-    await setFinishedDate(db, bookId, d.toISOString());
-    setFinishedInput('');
-    reload();
+    try {
+      await setFinishedDate(db, bookId, d.toISOString());
+      setFinishedInput('');
+      reload();
+    } catch {
+      notify('Save failed', 'Could not save the date. Try again.');
+    }
   }
 
   async function onSaveReview() {
-    await setReview(db, bookId, reviewDraft.trim());
-    reload();
+    try {
+      await setReview(db, bookId, reviewDraft.trim());
+      reload();
+    } catch {
+      notify('Save failed', 'Your review was not saved. Try again.');
+    }
   }
 
   function onDelete() {
     confirmDialog('Remove book', `Remove "${book!.title}" from your shelf?`, 'Remove', async () => {
-      await deleteBook(db, bookId);
-      router.back();
+      try {
+        await deleteBook(db, bookId);
+        router.back();
+      } catch {
+        notify('Remove failed', 'Could not remove the book. Try again.');
+      }
     });
   }
 

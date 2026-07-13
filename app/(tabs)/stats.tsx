@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { notify } from '../../lib/alert';
+import { confirmDialog, notify } from '../../lib/alert';
 import { exportLibrary, importLibrary } from '../../lib/backup';
 import { getAllBooks, getAllSessions } from '../../lib/db';
 import { pagesInYear } from '../../lib/stats';
@@ -99,24 +99,41 @@ export default function Stats() {
       )}
 
       <Text style={styles.subheading}>Backup</Text>
-      <Pressable style={styles.recapRow} onPress={() => exportLibrary(db)}>
+      <Pressable
+        style={styles.recapRow}
+        onPress={() =>
+          exportLibrary(db).catch(() =>
+            notify('Export failed', 'Could not create the backup file.')
+          )
+        }
+      >
         <Text style={styles.recapRowText}>Export library as JSON</Text>
         <Text style={styles.recapRowArrow}>↓</Text>
       </Pressable>
       <Pressable
         style={styles.recapRow}
-        onPress={async () => {
-          try {
-            const count = await importLibrary(db);
-            if (count !== null) {
-              notify('Import complete', `${count} books imported or updated.`);
-              getAllBooks(db).then(setBooks);
-              getAllSessions(db).then(setSessions);
+        onPress={() =>
+          // Import overwrites matching books unconditionally (no
+          // last-write-wins) — restoring an old backup over newer on-device
+          // data is silent data loss, so it gets a confirm.
+          confirmDialog(
+            'Import backup',
+            'Books in the file will overwrite matching books on this device, even if the backup is older than your current data.',
+            'Import',
+            async () => {
+              try {
+                const count = await importLibrary(db);
+                if (count !== null) {
+                  notify('Import complete', `${count} books imported or updated.`);
+                  getAllBooks(db).then(setBooks);
+                  getAllSessions(db).then(setSessions);
+                }
+              } catch {
+                notify('Import failed', 'That file is not a Bookmarked backup.');
+              }
             }
-          } catch {
-            notify('Import failed', 'That file is not a Bookmarked backup.');
-          }
-        }}
+          )
+        }
       >
         <Text style={styles.recapRowText}>Import library from JSON</Text>
         <Text style={styles.recapRowArrow}>↑</Text>
