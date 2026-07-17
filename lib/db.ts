@@ -15,6 +15,7 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       current_page INTEGER NOT NULL DEFAULT 0,
       rating REAL,
       review TEXT,
+      notes TEXT,
       added_at TEXT NOT NULL,
       started_at TEXT,
       finished_at TEXT,
@@ -37,6 +38,7 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
   for (const ddl of [
     'ALTER TABLE books ADD COLUMN description TEXT',
     'ALTER TABLE books ADD COLUMN updated_at TEXT',
+    'ALTER TABLE books ADD COLUMN notes TEXT',
   ]) {
     try {
       await db.execAsync(ddl);
@@ -69,6 +71,7 @@ function rowToBook(r: Record<string, unknown>): Book {
     currentPage: r.current_page as number,
     rating: (r.rating as number) ?? null,
     review: (r.review as string) ?? null,
+    notes: (r.notes as string) ?? null,
     addedAt: r.added_at as string,
     startedAt: (r.started_at as string) ?? null,
     finishedAt: (r.finished_at as string) ?? null,
@@ -222,6 +225,14 @@ export async function setReview(
   review: string
 ): Promise<void> {
   await db.runAsync('UPDATE books SET review = ? WHERE id = ?', review, id);
+}
+
+export async function setNotes(
+  db: SQLiteDatabase,
+  id: number,
+  notes: string
+): Promise<void> {
+  await db.runAsync('UPDATE books SET notes = ? WHERE id = ?', notes, id);
 }
 
 export async function setDescription(

@@ -11,7 +11,7 @@ import type { Book, ReadingSession } from '../../lib/types';
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.card}>
+    <View style={styles.card} accessible accessibilityLabel={`${label}: ${value}`}>
       <Text style={styles.cardValue}>{value}</Text>
       <Text style={styles.cardLabel}>{label}</Text>
     </View>
@@ -36,7 +36,7 @@ export default function Stats() {
     (b) => new Date(b.finishedAt!).getFullYear() === year
   );
   const pagesThisYear = pagesInYear(sessions, year);
-  const rated = books.filter((b) => b.rating !== null);
+  const rated = finished.filter((b) => b.rating !== null);
   const avgRating =
     rated.length > 0
       ? (rated.reduce((sum, b) => sum + (b.rating ?? 0), 0) / rated.length).toFixed(1)
@@ -63,9 +63,22 @@ export default function Stats() {
         <StatCard label="Avg rating" value={String(avgRating)} />
         <StatCard label="All-time read" value={String(finished.length)} />
       </View>
+      <View style={styles.cardRow}>
+        <StatCard label="Library total" value={String(books.length)} />
+        <StatCard
+          label="Currently reading"
+          value={String(books.filter((book) => book.status === 'reading').length)}
+        />
+      </View>
 
       <Text style={styles.subheading}>By quarter</Text>
-      <View style={styles.quarters}>
+      <View
+        style={styles.quarters}
+        accessible
+        accessibilityLabel={`Books finished by quarter: ${quarters
+          .map((count, index) => `Q${index + 1}, ${count}`)
+          .join('; ')}`}
+      >
         {quarters.map((count, i) => (
           <View key={i} style={styles.quarterCol}>
             <View style={styles.barTrack}>
@@ -90,6 +103,8 @@ export default function Stats() {
               key={y}
               style={styles.recapRow}
               onPress={() => router.push(`/recap/${y}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${y} reading recap`}
             >
               <Text style={styles.recapRowText}>{y} in books</Text>
               <Text style={styles.recapRowArrow}>→</Text>
@@ -106,6 +121,8 @@ export default function Stats() {
             notify('Export failed', 'Could not create the backup file.')
           )
         }
+        accessibilityRole="button"
+        accessibilityLabel="Export library backup as JSON"
       >
         <Text style={styles.recapRowText}>Export library as JSON</Text>
         <Text style={styles.recapRowArrow}>↓</Text>
@@ -134,6 +151,8 @@ export default function Stats() {
             }
           )
         }
+        accessibilityRole="button"
+        accessibilityLabel="Import library backup from JSON"
       >
         <Text style={styles.recapRowText}>Import library from JSON</Text>
         <Text style={styles.recapRowArrow}>↑</Text>

@@ -43,7 +43,13 @@ function CoverThumb({ book, showRating }: { book: Book; showRating?: boolean }) 
   const coverSize = useCoverSize();
   return (
     <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
-      <Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${book.title} by ${book.author || 'unknown author'}${
+          showRating && book.rating !== null ? `, rated ${book.rating} out of 10` : ''
+        }`}
+        accessibilityHint="Opens book details"
+      >
         {book.coverUrl ? (
           <Image
             source={{ uri: book.coverUrl }}
@@ -73,6 +79,11 @@ function HeroCard({ book, onLog }: { book: Book; onLog: (b: Book) => void }) {
     <Pressable
       style={styles.hero}
       onPress={() => router.push({ pathname: '/book/[id]', params: { id: String(book.id) } })}
+      accessibilityRole="button"
+      accessibilityLabel={`${book.title} by ${book.author || 'unknown author'}${
+        pct !== null ? `, page ${book.currentPage} of ${book.totalPages}, ${pct} percent` : ''
+      }`}
+      accessibilityHint="Opens book details"
     >
       {book.coverUrl ? (
         <Image source={{ uri: book.coverUrl }} style={styles.heroCover} contentFit="cover" />
@@ -101,7 +112,15 @@ function HeroCard({ book, onLog }: { book: Book; onLog: (b: Book) => void }) {
           </>
         )}
         {book.totalPages ? (
-          <Pressable style={styles.logBtn} onPress={() => onLog(book)}>
+          <Pressable
+            style={styles.logBtn}
+            onPress={(event) => {
+              event.stopPropagation();
+              onLog(book);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Log progress for ${book.title}`}
+          >
             <Text style={styles.logBtnText}>Log progress</Text>
           </Pressable>
         ) : (
@@ -118,7 +137,7 @@ function RowHeader({ label, accent, href }: { label: string; accent: string; hre
       <Text style={[styles.sectionLabel, { color: accent }]}>{label}</Text>
       {href && (
         <Link href={href} asChild>
-          <Pressable hitSlop={8}>
+          <Pressable hitSlop={8} accessibilityRole="button" accessibilityLabel={`See all ${label}`}>
             <Text style={styles.seeAll}>See all →</Text>
           </Pressable>
         </Link>
@@ -243,7 +262,12 @@ export default function Shelf() {
       )}
 
       {finishedThisYear.length > 0 && (
-        <Pressable style={styles.yearStrip} onPress={() => router.push(`/recap/${year}`)}>
+        <Pressable
+          style={styles.yearStrip}
+          onPress={() => router.push(`/recap/${year}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${year} recap, ${finishedThisYear.length} books, ${pagesThisYear} pages`}
+        >
           <Text style={styles.yearStripText}>
             {year} · {finishedThisYear.length}{' '}
             {finishedThisYear.length === 1 ? 'book' : 'books'} · {pagesThisYear} pages →
@@ -257,8 +281,13 @@ export default function Shelf() {
         animationType="slide"
         onRequestClose={() => setLogBook(null)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setLogBook(null)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
+        <Pressable style={styles.modalOverlay} onPress={() => setLogBook(null)} accessible={false}>
+          <Pressable
+            style={styles.modalCard}
+            onPress={() => {}}
+            accessibilityViewIsModal
+            accessibilityLabel={logBook ? `Log progress for ${logBook.title}` : 'Log progress'}
+          >
             {logBook && (
               <>
                 <Text style={styles.modalTitle} numberOfLines={1}>
@@ -270,25 +299,52 @@ export default function Shelf() {
                     ? ` · ${Math.round((logPage / logBook.totalPages) * 100)}%`
                     : ''}
                 </Text>
-                <Slider
-                  style={{ width: '100%', height: 40 }}
-                  minimumValue={0}
-                  maximumValue={logBook.totalPages ?? 1}
-                  step={1}
-                  value={logPage}
-                  onValueChange={(v: number) => setLogPage(Math.round(v))}
-                  minimumTrackTintColor={colors.green}
-                  maximumTrackTintColor={colors.border}
-                  thumbTintColor={colors.green}
-                />
+                <View
+                  accessible
+                  accessibilityRole="adjustable"
+                  accessibilityLabel="Current page"
+                  accessibilityValue={{ min: 0, max: logBook.totalPages ?? 1, now: logPage }}
+                  accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+                  onAccessibilityAction={(event) =>
+                    setLogPage((current) =>
+                      Math.max(
+                        0,
+                        Math.min(
+                          logBook.totalPages ?? 1,
+                          current + (event.nativeEvent.actionName === 'increment' ? 1 : -1)
+                        )
+                      )
+                    )
+                  }
+                >
+                  <Slider
+                    style={{ width: '100%', height: 40 }}
+                    minimumValue={0}
+                    maximumValue={logBook.totalPages ?? 1}
+                    step={1}
+                    value={logPage}
+                    onValueChange={(v: number) => setLogPage(Math.round(v))}
+                    minimumTrackTintColor={colors.green}
+                    maximumTrackTintColor={colors.border}
+                    thumbTintColor={colors.green}
+                  />
+                </View>
                 <View style={styles.modalBtnRow}>
-                  <Pressable style={styles.modalCancel} onPress={() => setLogBook(null)}>
+                  <Pressable
+                    style={styles.modalCancel}
+                    onPress={() => setLogBook(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel progress update"
+                  >
                     <Text style={styles.modalCancelText}>Cancel</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.modalSave, saving && { opacity: 0.5 }]}
                     disabled={saving}
                     onPress={saveLog}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: saving, busy: saving }}
+                    accessibilityLabel={saving ? 'Saving progress' : 'Save progress'}
                   >
                     <Text style={styles.modalSaveText}>{saving ? 'Saving…' : 'Save'}</Text>
                   </Pressable>
@@ -374,7 +430,7 @@ const styles = StyleSheet.create({
   },
   thumbPlaceholderText: {
     color: colors.textDim,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -387,7 +443,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
   },
-  badgeText: { color: colors.orange, fontSize: 11, fontWeight: '700' },
+  badgeText: { color: colors.orange, fontSize: 12, fontWeight: '700' },
   yearStrip: {
     marginTop: 24,
     marginHorizontal: 16,

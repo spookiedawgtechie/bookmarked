@@ -7,6 +7,15 @@ export interface SearchResult {
   year: number | null;
 }
 
+// Open Library descriptions sometimes contain Markdown links added by users.
+// Keep the useful label but discard the destination before showing the text.
+export function sanitizeDescription(value: string): string {
+  return value
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 interface OLDoc {
   key: string;
   title: string;

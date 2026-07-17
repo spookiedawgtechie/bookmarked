@@ -22,6 +22,7 @@ import {
   setCoverUrl,
   setDescription,
   setFinishedDate,
+  setNotes,
   setRating,
   setReview,
   setStatus,
@@ -29,7 +30,7 @@ import {
 } from '../../lib/db';
 import { confirmDialog, notify } from '../../lib/alert';
 import { formatDate } from '../../lib/format';
-import { coverUrl, fetchCoverIds, fetchDescription } from '../../lib/openlibrary';
+import { coverUrl, fetchCoverIds, fetchDescription, sanitizeDescription } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
 import type { Book, BookStatus } from '../../lib/types';
 
@@ -47,6 +48,7 @@ export default function BookDetail() {
   const [notFound, setNotFound] = useState(false);
   const [pagesInput, setPagesInput] = useState('');
   const [reviewDraft, setReviewDraft] = useState('');
+  const [notesDraft, setNotesDraft] = useState('');
   const [page, setPage] = useState(0);
   const [ratingDraft, setRatingDraft] = useState(0);
   const [descLoading, setDescLoading] = useState(false);
@@ -63,6 +65,12 @@ export default function BookDetail() {
   // session delta. Multiple debounced writes in one visit each need their
   // own accurate from/to, not just the value at screen-load time.
   const persistedPageRef = useRef(0);
+  const pendingPageRef = useRef<number | null>(null);
+  const pendingRatingRef = useRef<number | null>(null);
+  const totalPagesRef = useRef<number | null>(null);
+  const progressWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const ratingWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const mountedRef = useRef(true);
 
   const reload = useCallback(async () => {
     const b = await getBook(db, bookId);
@@ -72,7 +80,9 @@ export default function BookDetail() {
       setPage(b.currentPage);
       persistedPageRef.current = b.currentPage;
       setReviewDraft(b.review ?? '');
+      setNotesDraft(b.notes ?? '');
       setRatingDraft(b.rating ?? 0);
+      totalPagesRef.current = b.totalPages;
     }
   }, [db, bookId]);
 
@@ -87,7 +97,7 @@ export default function BookDetail() {
     setDescLoading(true);
     fetchDescription(book.olKey)
       .then(async (d) => {
-        await setDescription(db, bookId, d ?? '');
+        await setDescription(db, bookId, d ? sanitizeDescription(d) : '');
         if (!cancelled) await reload();
       })
       .catch(() => {})
@@ -98,6 +108,21 @@ export default function BookDetail() {
       cancelled = true;
     };
   }, [db, bookId, book, reload]);
+
+  // If the user navigates away before the 600 ms debounce completes, flush
+  // the final values instead of silently losing the last slider movement.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (progressTimer.current) clearTimeout(progressTimer.current);
+      if (ratingTimer.current) clearTimeout(ratingTimer.current);
+      const pendingPage = pendingPageRef.current;
+      const pendingRating = pendingRatingRef.current;
+      if (pendingPage !== null) queueProgressWrite(pendingPage, false);
+      if (pendingRating !== null) queueRatingWrite(pendingRating, false);
+    };
+  }, [db, bookId]);
 
   if (!book) {
     // Distinguish "still loading" (blank) from "no such book" (bad deep
@@ -136,36 +161,49 @@ export default function BookDetail() {
     }
   }
 
+  function queueProgressWrite(value: number, reportError = true) {
+    if (pendingPageRef.current === value) pendingPageRef.current = null;
+    progressWriteRef.current = progressWriteRef.current
+      .then(async () => {
+        const from = persistedPageRef.current;
+        await logProgress(db, bookId, from, value);
+        persistedPageRef.current = value;
+        if (totalPagesRef.current && value >= totalPagesRef.current) {
+          await setStatus(db, bookId, 'read');
+          if (mountedRef.current) await reload();
+        }
+      })
+      .catch(() => {
+        if (reportError && mountedRef.current) {
+          notify('Save failed', 'Your progress was not saved. Try again.');
+        }
+      });
+  }
+
+  function queueRatingWrite(value: number, reportError = true) {
+    if (pendingRatingRef.current === value) pendingRatingRef.current = null;
+    ratingWriteRef.current = ratingWriteRef.current
+      .then(() => setRating(db, bookId, value === 0 ? null : value))
+      .catch(() => {
+        if (reportError && mountedRef.current) {
+          notify('Save failed', 'Your rating was not saved. Try again.');
+        }
+      });
+  }
+
   function onProgressChange(value: number) {
     const v = Math.round(value);
     setPage(v);
+    pendingPageRef.current = v;
     if (progressTimer.current) clearTimeout(progressTimer.current);
-    progressTimer.current = setTimeout(async () => {
-      try {
-        const from = persistedPageRef.current;
-        await logProgress(db, bookId, from, v);
-        persistedPageRef.current = v;
-        if (book && book.totalPages && v >= book.totalPages) {
-          await setStatus(db, bookId, 'read');
-          reload();
-        }
-      } catch {
-        notify('Save failed', 'Your progress was not saved. Try again.');
-      }
-    }, 600);
+    progressTimer.current = setTimeout(() => queueProgressWrite(v), 600);
   }
 
   function onRatingChange(value: number) {
     setRatingDraft(value);
+    pendingRatingRef.current = value;
     if (ratingTimer.current) clearTimeout(ratingTimer.current);
-    ratingTimer.current = setTimeout(async () => {
-      try {
-        await setRating(db, bookId, value === 0 ? null : value);
-        reload();
-      } catch {
-        notify('Save failed', 'Your rating was not saved. Try again.');
-      }
-    }, 600);
+    ratingTimer.current = setTimeout(() => queueRatingWrite(value), 600);
   }
 
   function openCoverPicker() {
@@ -218,6 +256,15 @@ export default function BookDetail() {
     }
   }
 
+  async function onSaveNotes() {
+    try {
+      await setNotes(db, bookId, notesDraft.trim());
+      reload();
+    } catch {
+      notify('Save failed', 'Your notes were not saved. Try again.');
+    }
+  }
+
   function onDelete() {
     confirmDialog('Remove book', `Remove "${book!.title}" from your shelf?`, 'Remove', async () => {
       try {
@@ -242,7 +289,12 @@ export default function BookDetail() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Pressable onPress={openCoverPicker}>
+          <Pressable
+            onPress={openCoverPicker}
+            accessibilityRole="button"
+            accessibilityLabel={`Change cover for ${book.title}`}
+            accessibilityHint="Opens alternate covers from Open Library"
+          >
             {book.coverUrl ? (
               <Image
                 source={{ uri: book.coverUrl.replace('-M.jpg', '-L.jpg') }}
@@ -265,7 +317,7 @@ export default function BookDetail() {
           </View>
         </View>
 
-        <View style={styles.statusRow}>
+        <View style={styles.statusRow} accessibilityRole="radiogroup" accessibilityLabel="Reading status">
           {STATUSES.map((s) => {
             const active = book.status === s.value;
             return (
@@ -273,6 +325,9 @@ export default function BookDetail() {
                 key={s.value}
                 style={[styles.statusBtn, active && { backgroundColor: s.accent }]}
                 onPress={() => onStatus(s.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={s.label}
               >
                 <Text style={[styles.statusBtnText, active && { color: colors.onAccent }]}>
                   {s.label}
@@ -288,7 +343,7 @@ export default function BookDetail() {
             {descLoading ? (
               <ActivityIndicator color={colors.green} style={{ alignSelf: 'flex-start' }} />
             ) : (
-              <Text style={styles.descText}>{book.description}</Text>
+              <Text style={styles.descText}>{sanitizeDescription(book.description ?? '')}</Text>
             )}
           </View>
         )}
@@ -308,8 +363,14 @@ export default function BookDetail() {
                 placeholderTextColor={colors.textDim}
                 value={pagesInput}
                 onChangeText={setPagesInput}
+                accessibilityLabel="Total number of pages"
               />
-              <Pressable style={styles.saveBtn} onPress={onSavePages}>
+              <Pressable
+                style={styles.saveBtn}
+                onPress={onSavePages}
+                accessibilityRole="button"
+                accessibilityLabel="Save total pages"
+              >
                 <Text style={styles.saveBtnText}>Save</Text>
               </Pressable>
             </View>
@@ -323,17 +384,36 @@ export default function BookDetail() {
               Page {page} of {book.totalPages}
               {pct !== null ? ` · ${pct}%` : ''}
             </Text>
-            <Slider
-              style={{ width: '100%', height: 40 }}
-              minimumValue={0}
-              maximumValue={book.totalPages}
-              step={1}
-              value={page}
-              onValueChange={onProgressChange}
-              minimumTrackTintColor={colors.green}
-              maximumTrackTintColor={colors.border}
-              thumbTintColor={colors.green}
-            />
+            <View
+              accessible
+              accessibilityRole="adjustable"
+              accessibilityLabel="Reading progress in pages"
+              accessibilityValue={{ min: 0, max: book.totalPages, now: page, text: `${pct ?? 0} percent` }}
+              accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+              onAccessibilityAction={(event) =>
+                onProgressChange(
+                  Math.max(
+                    0,
+                    Math.min(
+                      book.totalPages!,
+                      page + (event.nativeEvent.actionName === 'increment' ? 1 : -1)
+                    )
+                  )
+                )
+              }
+            >
+              <Slider
+                style={{ width: '100%', height: 40 }}
+                minimumValue={0}
+                maximumValue={book.totalPages}
+                step={1}
+                value={page}
+                onValueChange={onProgressChange}
+                minimumTrackTintColor={colors.green}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.green}
+              />
+            </View>
           </View>
         )}
 
@@ -342,17 +422,36 @@ export default function BookDetail() {
           <Text style={styles.progressText}>
             {ratingDraft > 0 ? `★ ${ratingDraft} / 10` : 'Not rated'}
           </Text>
-          <Slider
-            style={{ width: '100%', height: 40 }}
-            minimumValue={0}
-            maximumValue={10}
-            step={0.5}
-            value={ratingDraft}
-            onValueChange={onRatingChange}
-            minimumTrackTintColor={colors.orange}
-            maximumTrackTintColor={colors.border}
-            thumbTintColor={colors.orange}
-          />
+          <View
+            accessible
+            accessibilityRole="adjustable"
+            accessibilityLabel="Book rating"
+            accessibilityValue={{ min: 0, max: 10, now: ratingDraft, text: ratingDraft > 0 ? `${ratingDraft} out of 10` : 'Not rated' }}
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+            onAccessibilityAction={(event) =>
+              onRatingChange(
+                Math.max(
+                  0,
+                  Math.min(
+                    10,
+                    ratingDraft + (event.nativeEvent.actionName === 'increment' ? 0.5 : -0.5)
+                  )
+                )
+              )
+            }
+          >
+            <Slider
+              style={{ width: '100%', height: 40 }}
+              minimumValue={0}
+              maximumValue={10}
+              step={0.5}
+              value={ratingDraft}
+              onValueChange={onRatingChange}
+              minimumTrackTintColor={colors.orange}
+              maximumTrackTintColor={colors.border}
+              thumbTintColor={colors.orange}
+            />
+          </View>
         </View>
 
         {book.status === 'read' && (
@@ -372,8 +471,15 @@ export default function BookDetail() {
                 value={finishedInput}
                 onChangeText={setFinishedInput}
                 autoCorrect={false}
+                accessibilityLabel="Finished date"
+                accessibilityHint="Enter date as year, month, day"
               />
-              <Pressable style={styles.saveBtn} onPress={onSaveFinished}>
+              <Pressable
+                style={styles.saveBtn}
+                onPress={onSaveFinished}
+                accessibilityRole="button"
+                accessibilityLabel="Save finished date"
+              >
                 <Text style={styles.saveBtnText}>Save</Text>
               </Pressable>
             </View>
@@ -389,16 +495,52 @@ export default function BookDetail() {
             placeholderTextColor={colors.textDim}
             value={reviewDraft}
             onChangeText={setReviewDraft}
+            accessibilityLabel="Book review"
             onFocus={() =>
               setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)
             }
           />
-          <Pressable style={styles.saveBtn} onPress={onSaveReview}>
+          <Pressable
+            style={styles.saveBtn}
+            onPress={onSaveReview}
+            accessibilityRole="button"
+            accessibilityLabel="Save review"
+          >
             <Text style={styles.saveBtnText}>Save review</Text>
           </Pressable>
         </View>
 
-        <Pressable style={styles.deleteBtn} onPress={onDelete}>
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>Private notes</Text>
+          <Text style={styles.hint}>Keep quotes, reminders, and personal thoughts separate from your review.</Text>
+          <TextInput
+            style={[styles.input, styles.reviewInput]}
+            multiline
+            placeholder="Notes only for you"
+            placeholderTextColor={colors.textDim}
+            value={notesDraft}
+            onChangeText={setNotesDraft}
+            accessibilityLabel="Private notes"
+            onFocus={() =>
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)
+            }
+          />
+          <Pressable
+            style={styles.saveBtn}
+            onPress={onSaveNotes}
+            accessibilityRole="button"
+            accessibilityLabel="Save private notes"
+          >
+            <Text style={styles.saveBtnText}>Save notes</Text>
+          </Pressable>
+        </View>
+
+        <Pressable
+          style={styles.deleteBtn}
+          onPress={onDelete}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${book.title} from shelf`}
+        >
           <Text style={styles.deleteBtnText}>Remove from shelf</Text>
         </Pressable>
       </ScrollView>
@@ -409,9 +551,26 @@ export default function BookDetail() {
         animationType="slide"
         onRequestClose={() => setCoverPickerOpen(false)}
       >
-        <Pressable style={styles.pickerOverlay} onPress={() => setCoverPickerOpen(false)}>
-          <Pressable style={styles.pickerCard} onPress={() => {}}>
+        <Pressable
+          style={styles.pickerOverlay}
+          onPress={() => setCoverPickerOpen(false)}
+          accessible={false}
+        >
+          <Pressable
+            style={styles.pickerCard}
+            onPress={() => {}}
+            accessibilityViewIsModal
+            accessibilityLabel="Alternate cover picker"
+          >
             <Text style={styles.pickerTitle}>Pick a cover</Text>
+            <Pressable
+              style={styles.pickerClose}
+              onPress={() => setCoverPickerOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close cover picker"
+            >
+              <Text style={styles.pickerCloseText}>Close</Text>
+            </Pressable>
             <Text style={styles.hint}>
               Covers from other editions — choose the one matching your copy.
             </Text>
@@ -421,8 +580,13 @@ export default function BookDetail() {
             )}
             <ScrollView style={{ maxHeight: 420 }}>
               <View style={styles.pickerGrid}>
-                {(altCovers ?? []).map((id) => (
-                  <Pressable key={id} onPress={() => onPickCover(id)}>
+                {(altCovers ?? []).map((id, index) => (
+                  <Pressable
+                    key={id}
+                    onPress={() => onPickCover(id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use alternate cover ${index + 1}`}
+                  >
                     <Image
                       source={{ uri: coverUrl(id, 'M') }}
                       style={styles.pickerCover}
@@ -446,7 +610,7 @@ const styles = StyleSheet.create({
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   coverHint: {
     color: colors.textDim,
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
     marginTop: 6,
   },
@@ -463,6 +627,15 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
   },
   pickerTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  pickerClose: {
+    position: 'absolute',
+    right: 14,
+    top: 10,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+  },
+  pickerCloseText: { color: colors.green, fontSize: 14, fontWeight: '700' },
   pickerGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

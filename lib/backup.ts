@@ -102,13 +102,13 @@ export async function importLibrary(db: SQLiteDatabase): Promise<number | null> 
       await db.runAsync(
         `INSERT INTO books
            (ol_key, title, author, cover_url, total_pages, status, current_page,
-            rating, review, added_at, started_at, finished_at, description, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            rating, review, notes, added_at, started_at, finished_at, description, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(ol_key) DO UPDATE SET
            title = excluded.title, author = excluded.author,
            cover_url = excluded.cover_url, total_pages = excluded.total_pages,
            status = excluded.status, current_page = excluded.current_page,
-           rating = excluded.rating, review = excluded.review,
+           rating = excluded.rating, review = excluded.review, notes = excluded.notes,
            added_at = excluded.added_at, started_at = excluded.started_at,
            finished_at = excluded.finished_at, description = excluded.description,
            updated_at = excluded.updated_at`,
@@ -121,6 +121,7 @@ export async function importLibrary(db: SQLiteDatabase): Promise<number | null> 
         currentPage,
         rating,
         importString(b.review),
+        importString(b.notes),
         importDate(b.added_at) ?? new Date().toISOString(),
         importDate(b.started_at),
         importDate(b.finished_at),

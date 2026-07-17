@@ -17,8 +17,8 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 
 | ID | Sev | Category | Location | Summary | Status |
 |---|---|---|---|---|---|
-| H1 | High | Accessibility | `index.tsx` CoverThumb, `list/[status].tsx` | Cover-only grids: image-only Pressables, no accessibilityLabel/alt — shelves unusable with screen readers | OPEN |
-| H2 | High | Accessibility | app-wide | No accessible names anywhere: +/✓/✕ buttons, unlabeled sliders (bare `input[type=range]` on web), heatmap = ~370 empty views, no disabled-state conveyance | OPEN |
+| H1 | High | Accessibility | `index.tsx` CoverThumb, `list/[status].tsx` | Cover-only grids: image-only Pressables, no accessibilityLabel/alt — shelves unusable with screen readers | FIXED IN CODE (device SR verification pending) |
+| H2 | High | Accessibility | app-wide | No accessible names anywhere: +/✓/✕ buttons, unlabeled sliders (bare `input[type=range]` on web), heatmap = ~370 empty views, no disabled-state conveyance | FIXED IN CODE (device SR verification pending) |
 | M1 | Med | Race | `search.tsx:34-52` | Debounce cleanup clears timer only; in-flight fetch not aborted → stale out-of-order results overwrite newer | FIXED (cancelled-flag guard; block 3) |
 | M2 | Med | Race/Data | `index.tsx` saveLog | Double-tap Save = duplicate session rows (UNIQUE includes ms timestamp) → inflated page stats/streaks. **Fix before next release** | FIXED (saving guard + disabled btn; 8c229d5) |
 | M3 | Med | Security/Reliability | `backup.ts` importLibrary | Only ol_key/title type-checked; bad `status` → book vanishes from all shelves; string `rating` → string-concat avg; bad `total_pages` → NaN slider. **Fix before next release** | FIXED (per-field validators; 8c229d5) |
@@ -28,24 +28,24 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 | M7 | Med | Reliability | web startup | `navigator.storage.persist()` never called — eviction risk higher than necessary; one-line fix | FIXED (requested on web boot in _layout; grant is browser's call) |
 | M8 | Med | Reliability | `openlibrary.ts` ×3 | No fetch timeouts → infinite spinners on dead networks (search/description/covers) | FIXED (fetchWithTimeout 10s; block 3) |
 | L1 | Low | Reliability | `[id].tsx` desc effect | Transient OL 5xx caches `''` sentinel permanently (fetchDescription returns null on any !ok; should 404-only) | FIXED (404-only null, else throw; block 3) |
-| L2 | Low | Race | `[id].tsx` timers | Debounce timers not cleaned on unmount; write lands after back-nav → stale Shelf until next focus. Fix = flush-on-unmount, not cancel | OPEN |
+| L2 | Low | Race | `[id].tsx` timers | Debounce timers not cleaned on unmount; write lands after back-nav → stale Shelf until next focus. Fix = flush-on-unmount, not cancel | FIXED (pending values flushed on unmount) |
 | L3 | Low | Copy | recap fastest note | "1 days" — missing pluralization (year strip does it right) | FIXED (plural() helper in lib/format.ts) |
 | L4 | Low | Consistency | `[id].tsx:deleteBtnText` + 5 files | Hardcoded hex outside theme: `#E5534B`, `#000`-on-green, rgba overlays → add danger/onAccent/overlay tokens | FIXED (danger/onAccent/overlay/badgeBg tokens; all screens swept) |
-| L5 | Low | Visual/A11y | `(tabs)/_layout.tsx` | Tab emoji renders doubled on web ("📚 📚 Shelf"); SRs announce twice | OPEN |
+| L5 | Low | Visual/A11y | `(tabs)/_layout.tsx` | Tab emoji renders doubled on web ("📚 📚 Shelf"); SRs announce twice | FIXED (cross-platform Expo Symbols) |
 | L6 | Low | Consistency | recap list vs detail | Date formats: "07-07" (MM-DD) vs "YYYY-MM-DD"; no locale; add one formatDate helper | FIXED (lib/format.ts formatDate/formatDateShort) |
 | L7 | Low | Visual | `index.tsx:24`, `list/[status].tsx:13` | `Dimensions.get` at module scope — stale on web resize (native safe: portrait-locked). Use `useWindowDimensions` | FIXED (useWindowDimensions, sizes verified against formula live) |
 | L8 | Low | Visual | `[id].tsx` author | No numberOfLines — multi-author books wrap unbounded | FIXED (numberOfLines=2) |
 | L9 | Low | Reliability | recap/[year], book/[id] | `/recap/abc` → "NaN in books"; `/book/999` → permanent blank (no not-found state) | FIXED (year guard + Book-not-found state, both verified live) |
-| L10 | Low | Accessibility | 11px text sites | Legibility + font-scaling may clip fixed-height bars/cards; test at 1.3× scale | OPEN |
+| L10 | Low | Accessibility | 11px text sites | Legibility + font-scaling may clip fixed-height bars/cards; test at 1.3× scale | FIXED IN CODE (minimum raised to 12px; large-text verification pending) |
 | L11 | Low | Reliability/UX | stats.tsx import | No confirm before import's documented blind overwrite; `confirmDialog` already exists — use it | FIXED (confirmDialog gate; 8fc47fd) |
-| L12 | Low | Security | vercel.json | No CSP/XCTO/Referrer-Policy (only COOP/COEP, verified live). Defense-in-depth only — CSP needs `wasm-unsafe-eval` + OL hosts, verify on preview first | OPEN |
-| I1 | Info | Accessibility | web Modals | Focus trap/Escape/restore untested on RNW | NEEDS VERIFICATION |
-| I2 | Info | Consistency | stats vs recap | Two definitions of "Avg rating" (all rated books vs year's finished) | OPEN |
-| I3 | Info | Content | descriptions | OL blurbs can embed spam/piracy markdown links; rendered inert (safe); consider stripping | OPEN |
+| L12 | Low | Security | vercel.json | No CSP/XCTO/Referrer-Policy (only COOP/COEP, verified live). Defense-in-depth only — CSP needs `wasm-unsafe-eval` + OL hosts, verify on preview first | FIXED LOCALLY (preview verification pending) |
+| I1 | Info | Accessibility | web Modals | Focus trap/Escape/restore untested on RNW | IMPROVED (modal semantics + Escape path); focus behavior still needs verification |
+| I2 | Info | Consistency | stats vs recap | Two definitions of "Avg rating" (all rated books vs year's finished) | FIXED (finished/read books only) |
+| I3 | Info | Content | descriptions | OL blurbs can embed spam/piracy markdown links; rendered inert (safe); consider stripping | FIXED (Markdown link destinations stripped) |
 | I4 | Info | Performance | data layer | Full-table loads on focus: fine at personal scale, deliberate — no action | CLOSED |
 | I5 | Info | Correctness | dates | Local-time bucketing over UTC timestamps: safe for IST; only ±12h TZs could edge-shift | CLOSED |
 | I6 | Info | Performance | import | Main-thread JSON.parse of huge files — personal-scale non-issue | CLOSED |
-| I7 | Info | Legal | LICENSE | Still Expo's template MIT; owner decision pending | OPEN |
+| I7 | Info | Legal | LICENSE | Still Expo's template MIT; owner decision pending | FIXED (MIT retained; owner notice added alongside Expo's upstream notice) |
 | I8 | Info | Reliability | APK | predictiveBackGestureEnabled set but reported non-functional; check device dev-toggle first | OPEN |
 
 ## Agreed sequencing
@@ -60,6 +60,10 @@ Local-first, single-user app: no server, no auth, no sessions, no payments, no t
 Quick wins (<~15 lines each): M2 guard, M7 persist(), M8 timeouts, AbortError swallow, L1, L3, L8, L9, L11.
 
 ## Remediation log
+
+- 2026-07-17, phases 1–4: accessibility labels and adjustable slider actions added across primary flows; emoji tabs replaced with Expo Symbols; detail slider values flush on unmount; Stats average standardized to finished/read books and library metrics added; private notes added with migration and backup support; Want/Read shelves gained text filtering and sorting; Open Library Markdown links sanitized; the owner's MIT notice added while preserving Expo's upstream notice; CSP/XCTO/Referrer/Permissions headers added locally. TypeScript, Android Metro export, web Metro export, postbuild, and local HTTP/header checks pass. No APK/EAS build or production deploy was performed. Remaining verification: TalkBack/large text, web modal focus behavior, multi-tab OPFS, and Vercel preview CSP behavior.
+
+- 2026-07-17 dependency review: `npm audit --omit=dev` reports 11 moderate, 0 high, and 0 critical advisories. The chain is Expo's transitive CLI/config/xcode build tooling (including the uuid buffer advisory); npm's proposed fix is an incompatible downgrade to Expo 46, so no forced audit fix was applied. Recheck when Expo publishes a compatible patched dependency graph.
 
 - 2026-07-13: polish batch + M7 (commit 39d1716) — L3, L4, L6, L7, L8, L9, M7 fixed. Owner verified storage persistence and date formats himself; grid resize (L7) owner-verification deferred but formula-verified live in browser. All Mediums closed except M6 (multi-tab experiment pending).
 

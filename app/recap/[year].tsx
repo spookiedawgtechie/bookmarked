@@ -61,7 +61,12 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function HighlightRow({ label, book, note }: { label: string; book: Book; note: string }) {
   return (
     <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
-      <Pressable style={styles.highlight}>
+      <Pressable
+        style={styles.highlight}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${book.title}, ${note}`}
+        accessibilityHint="Opens book details"
+      >
         {book.coverUrl ? (
           <Image source={{ uri: book.coverUrl }} style={styles.highlightCover} contentFit="cover" />
         ) : (
@@ -153,6 +158,11 @@ export default function Recap() {
   const dailyPages = dailyPagesInYear(sessions, y);
   const maxDaily = Math.max(...Object.values(dailyPages), 1);
   const heatmapWeeks = buildHeatmapWeeks(y, dailyPages);
+  const activeDays = Object.values(dailyPages).filter((count) => count > 0).length;
+  const bestDay = Object.entries(dailyPages).reduce<[string, number] | null>(
+    (best, entry) => (!best || entry[1] > best[1] ? entry : best),
+    null
+  );
 
   async function handleShare() {
     try {
@@ -237,12 +247,23 @@ export default function Recap() {
               )}
             </View>
 
-            <Pressable style={styles.shareBtn} onPress={handleShare}>
+            <Pressable
+              style={styles.shareBtn}
+              onPress={handleShare}
+              accessibilityRole="button"
+              accessibilityLabel={`Share ${y} reading recap as an image`}
+            >
               <Text style={styles.shareBtnText}>Share {y} recap</Text>
             </Pressable>
 
             <Text style={styles.subheading}>By quarter</Text>
-            <View style={styles.quarters}>
+            <View
+              style={styles.quarters}
+              accessible
+              accessibilityLabel={`Books finished by quarter: ${quarters
+                .map((count, index) => `Q${index + 1}, ${count}`)
+                .join('; ')}`}
+            >
               {quarters.map((count, i) => (
                 <View key={i} style={styles.quarterCol}>
                   <View style={styles.barTrack}>
@@ -264,7 +285,15 @@ export default function Recap() {
         {hasSessionsThisYear && (
           <>
             <Text style={styles.subheading}>By month</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Text style={styles.chartSummary}>
+              {months.map((count, index) => `${MONTH_LABELS[index]} ${count}`).join(' · ')}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
               <View style={styles.months}>
                 {months.map((count, i) => (
                   <View key={i} style={styles.monthCol}>
@@ -284,11 +313,17 @@ export default function Recap() {
             </ScrollView>
 
             <Text style={styles.subheading}>Reading heatmap</Text>
+            <Text style={styles.chartSummary} accessibilityLiveRegion="polite">
+              {activeDays} active {activeDays === 1 ? 'day' : 'days'} in {y}
+              {bestDay ? ` · Best day: ${formatDateShort(`${bestDay[0]}T12:00:00.000Z`)} with ${bestDay[1]} pages` : ''}
+            </Text>
             <ScrollView
               ref={heatmapScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               onContentSizeChange={() => heatmapScrollRef.current?.scrollToEnd({ animated: false })}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
             >
               <View style={styles.heatmapGrid}>
                 {heatmapWeeks.map((week, wi) => (
@@ -343,7 +378,14 @@ export default function Recap() {
                 href={{ pathname: '/book/[id]', params: { id: String(b.id) } }}
                 asChild
               >
-                <Pressable style={styles.bookRow}>
+                <Pressable
+                  style={styles.bookRow}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${b.title}, finished ${formatDateShort(b.finishedAt!)}${
+                    b.rating !== null ? `, rated ${b.rating} out of 10` : ''
+                  }`}
+                  accessibilityHint="Opens book details"
+                >
                   <Text style={styles.bookRowDate}>{formatDateShort(b.finishedAt!)}</Text>
                   <Text style={styles.bookRowTitle} numberOfLines={1}>
                     {b.title}
@@ -392,7 +434,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 8,
   },
-  legendText: { color: colors.textDim, fontSize: 11 },
+  legendText: { color: colors.textDim, fontSize: 12 },
   legendSwatch: { width: 11, height: 11, borderRadius: 2 },
   shareBtn: {
     backgroundColor: colors.green,
@@ -411,7 +453,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardValue: { color: colors.green, fontSize: 22, fontWeight: '800' },
-  cardLabel: { color: colors.textDim, fontSize: 11, marginTop: 4, textAlign: 'center' },
+  cardLabel: { color: colors.textDim, fontSize: 12, marginTop: 4, textAlign: 'center' },
   highlight: {
     flexDirection: 'row',
     backgroundColor: colors.card,
@@ -422,7 +464,7 @@ const styles = StyleSheet.create({
   highlightCover: { width: 56, height: 84, borderRadius: 6, backgroundColor: colors.border },
   highlightLabel: {
     color: colors.textDim,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.1,
     textTransform: 'uppercase',
@@ -440,6 +482,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 12,
   },
+  chartSummary: { color: colors.textDim, fontSize: 13, lineHeight: 19, marginBottom: 10 },
   quarters: {
     flexDirection: 'row',
     backgroundColor: colors.card,

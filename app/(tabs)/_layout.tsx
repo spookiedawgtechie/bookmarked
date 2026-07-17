@@ -1,9 +1,12 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import type { ColorValue } from 'react-native';
 import { colors } from '../../lib/theme';
 
-function TabIcon({ glyph, focused }: { glyph: string; focused: boolean }) {
-  return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>{glyph}</Text>;
+type TabSymbol = SymbolViewProps['name'];
+
+function TabIcon({ name, color }: { name: TabSymbol; color: ColorValue }) {
+  return <SymbolView name={name} size={22} tintColor={color} />;
 }
 
 export default function TabsLayout() {
@@ -22,21 +25,30 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Shelf',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="📚" focused={focused} />,
+          tabBarAccessibilityLabel: 'Shelf',
+          tabBarIcon: ({ color }) => (
+            <TabIcon name={{ ios: 'books.vertical', android: 'library_books', web: 'library_books' }} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
           title: 'Search',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="🔍" focused={focused} />,
+          tabBarAccessibilityLabel: 'Search books',
+          tabBarIcon: ({ color }) => (
+            <TabIcon name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="stats"
         options={{
           title: 'Stats',
-          tabBarIcon: ({ focused }) => <TabIcon glyph="📊" focused={focused} />,
+          tabBarAccessibilityLabel: 'Reading statistics',
+          tabBarIcon: ({ color }) => (
+            <TabIcon name={{ ios: 'chart.bar', android: 'bar_chart', web: 'bar_chart' }} color={color} />
+          ),
         }}
       />
     </Tabs>

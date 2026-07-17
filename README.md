@@ -7,14 +7,16 @@ A personal, local-first book tracker — a Letterboxd for books. Search Open Lib
 ## Features
 
 - **Search & add** books via the [Open Library](https://openlibrary.org) API — covers, authors, page counts, descriptions
-- **Shelf** — Want to Read / Currently Reading / Read, with a hero card for the book in progress
+- **Shelf** — Want to Read / Currently Reading / Read, with a hero card for the book in progress plus title/author filtering and practical sort options
 - **Progress tracking** — a page-number slider (not percentage) drives status automatically; sliding to the last page marks a book finished
 - **Reading sessions** — every page logged is timestamped, powering a streak counter, weekly pace, and accurate "pages read" stats that count in-progress reading, not just finished books
-- **Ratings & reviews** — a 10-point scale with half-point steps
+- **Ratings, reviews & notes** — a 10-point scale with half-point steps, a review, and separate private notes for quotes and reminders
 - **Yearly recaps** — books finished, pages read, top rated, fastest read, longest read, a month-by-month pages chart, and a GitHub-style reading heatmap — plus a one-tap shareable recap image
 - **Alternate covers** — pick the edition cover that matches your physical copy
 - **Backdating** — log books you read years ago with a real finish date, so your history stays honest
 - **Backup & restore** — full library export/import as JSON, portable between devices
+- **Library metrics** — yearly activity, all-time read count, current-reading count, and total books owned in the local library
+- **Accessible controls** — named cover actions, screen-reader-adjustable sliders, chart summaries, and cross-platform tab icons
 - **Dark, dense, AMOLED-black UI** — built for one thing: tracking books, not chasing engagement
 
 ## Stack

@@ -90,9 +90,16 @@ export default function Search() {
           value={query}
           onChangeText={setQuery}
           autoCorrect={false}
+          accessibilityLabel="Search Open Library"
         />
         {query.length > 0 && (
-          <Pressable style={styles.clearBtn} hitSlop={10} onPress={() => setQuery('')}>
+          <Pressable
+            style={styles.clearBtn}
+            hitSlop={10}
+            onPress={() => setQuery('')}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
             <Text style={styles.clearBtnText}>✕</Text>
           </Pressable>
         )}
@@ -128,6 +135,9 @@ export default function Search() {
                 style={[styles.addBtn, owned && styles.addBtnOwned]}
                 disabled={owned}
                 onPress={() => onAdd(item)}
+                accessibilityRole="button"
+                accessibilityLabel={owned ? `${item.title} is already in your library` : `Add ${item.title} to your library`}
+                accessibilityState={{ disabled: owned }}
               >
                 <Text style={[styles.addBtnText, owned && { color: colors.textDim }]}>
                   {owned ? '✓' : '+'}

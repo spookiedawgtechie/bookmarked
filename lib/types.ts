@@ -13,6 +13,7 @@ export interface Book {
   currentPage: number;
   rating: number | null; // 0.5–10, half-point steps
   review: string | null;
+  notes: string | null;
   addedAt: string; // ISO date strings
   startedAt: string | null;
   finishedAt: string | null;
