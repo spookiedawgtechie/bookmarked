@@ -1,6 +1,7 @@
 export interface SearchResult {
   key: string;
   title: string;
+  originalTitle: string | null;
   author: string;
   coverUrl: string | null;
   pages: number | null;
@@ -23,6 +24,14 @@ interface OLDoc {
   cover_i?: number;
   number_of_pages_median?: number;
   first_publish_year?: number;
+  editions?: {
+    docs?: {
+      title?: string;
+      cover_i?: number;
+      number_of_pages?: number;
+      language?: string[];
+    }[];
+  };
 }
 
 export function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {
@@ -66,16 +75,33 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
   const url =
     'https://openlibrary.org/search.json?q=' +
     encodeURIComponent(query) +
-    '&fields=key,title,author_name,cover_i,number_of_pages_median,first_publish_year&limit=25';
+    '&lang=en' +
+    '&fields=key,title,author_name,cover_i,number_of_pages_median,first_publish_year,' +
+    'editions,editions.title,editions.language,editions.cover_i,editions.number_of_pages' +
+    '&limit=25';
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`Open Library returned ${res.status}`);
   const json = (await res.json()) as { docs: OLDoc[] };
-  return json.docs.map((d) => ({
-    key: d.key,
-    title: d.title,
-    author: d.author_name?.join(', ') ?? 'Unknown author',
-    coverUrl: d.cover_i ? coverUrl(d.cover_i) : null,
-    pages: d.number_of_pages_median ?? null,
-    year: d.first_publish_year ?? null,
-  }));
+  return json.docs.map((d) => {
+    // `lang=en` influences the single nested edition selected by Open
+    // Library without excluding works that only match another language.
+    // Keep the Work key as identity, but display the selected edition's
+    // metadata when present (especially important for translated classics).
+    const edition = d.editions?.docs?.[0];
+    const preferredTitle = edition?.title?.trim() || d.title;
+    const originalTitle =
+      preferredTitle.localeCompare(d.title, undefined, { sensitivity: 'base' }) === 0
+        ? null
+        : d.title;
+    const coverId = edition?.cover_i ?? d.cover_i;
+    return {
+      key: d.key,
+      title: preferredTitle,
+      originalTitle,
+      author: d.author_name?.join(', ') ?? 'Unknown author',
+      coverUrl: coverId ? coverUrl(coverId) : null,
+      pages: edition?.number_of_pages ?? d.number_of_pages_median ?? null,
+      year: d.first_publish_year ?? null,
+    };
+  });
 }

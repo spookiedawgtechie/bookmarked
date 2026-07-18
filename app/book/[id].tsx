@@ -5,6 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -26,6 +27,7 @@ import {
   setRating,
   setReview,
   setStatus,
+  setTitle,
   setTotalPages,
 } from '../../lib/db';
 import { confirmDialog, notify } from '../../lib/alert';
@@ -49,6 +51,9 @@ export default function BookDetail() {
   const [pagesInput, setPagesInput] = useState('');
   const [reviewDraft, setReviewDraft] = useState('');
   const [notesDraft, setNotesDraft] = useState('');
+  const [titleDraft, setTitleDraft] = useState('');
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const [page, setPage] = useState(0);
   const [ratingDraft, setRatingDraft] = useState(0);
   const [descLoading, setDescLoading] = useState(false);
@@ -81,6 +86,7 @@ export default function BookDetail() {
       persistedPageRef.current = b.currentPage;
       setReviewDraft(b.review ?? '');
       setNotesDraft(b.notes ?? '');
+      setTitleDraft(b.title);
       setRatingDraft(b.rating ?? 0);
       totalPagesRef.current = b.totalPages;
     }
@@ -89,6 +95,18 @@ export default function BookDetail() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const shown = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardInset(event.endCoordinates.height);
+    });
+    const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardInset(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   // Fetch the blurb once per book, then cache it in SQLite ('' = none exists).
   useEffect(() => {
@@ -265,6 +283,21 @@ export default function BookDetail() {
     }
   }
 
+  async function onSaveTitle() {
+    const title = titleDraft.trim();
+    if (!title) {
+      notify('Title required', 'A book title cannot be empty.');
+      return;
+    }
+    try {
+      await setTitle(db, bookId, title);
+      setEditingTitle(false);
+      reload();
+    } catch {
+      notify('Save failed', 'The title was not saved. Try again.');
+    }
+  }
+
   function onDelete() {
     confirmDialog('Remove book', `Remove "${book!.title}" from your shelf?`, 'Remove', async () => {
       try {
@@ -309,7 +342,51 @@ export default function BookDetail() {
             <Text style={styles.coverHint}>Tap to change</Text>
           </Pressable>
           <View style={styles.headerText}>
-            <Text style={styles.title}>{book.title}</Text>
+            {editingTitle ? (
+              <View>
+                <TextInput
+                  style={[styles.input, styles.titleInput]}
+                  value={titleDraft}
+                  onChangeText={setTitleDraft}
+                  autoFocus
+                  selectTextOnFocus
+                  accessibilityLabel="Book title"
+                />
+                <View style={styles.titleActions}>
+                  <Pressable
+                    style={styles.titleSaveBtn}
+                    onPress={onSaveTitle}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save book title"
+                  >
+                    <Text style={styles.titleSaveText}>Save</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.titleCancelBtn}
+                    onPress={() => {
+                      setTitleDraft(book.title);
+                      setEditingTitle(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel editing title"
+                  >
+                    <Text style={styles.titleCancelText}>Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.title}>{book.title}</Text>
+                <Pressable
+                  onPress={() => setEditingTitle(true)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit title for ${book.title}`}
+                >
+                  <Text style={styles.editTitleText}>Edit title</Text>
+                </Pressable>
+              </View>
+            )}
             <Text style={styles.author} numberOfLines={2}>
               {book.author}
             </Text>
@@ -521,9 +598,13 @@ export default function BookDetail() {
             value={notesDraft}
             onChangeText={setNotesDraft}
             accessibilityLabel="Private notes"
-            onFocus={() =>
-              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)
-            }
+            onFocus={() => {
+              // Android reports the final keyboard height asynchronously.
+              // Scroll both before and after that animation, while the
+              // keyboard-height spacer gives the last field somewhere to go.
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 400);
+            }}
           />
           <Pressable
             style={styles.saveBtn}
@@ -543,6 +624,9 @@ export default function BookDetail() {
         >
           <Text style={styles.deleteBtnText}>Remove from shelf</Text>
         </Pressable>
+        {Platform.OS === 'android' && keyboardInset > 0 && (
+          <View style={{ height: keyboardInset }} accessible={false} />
+        )}
       </ScrollView>
 
       <Modal
@@ -650,6 +734,18 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1, marginLeft: 16, justifyContent: 'center' },
   title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  titleInput: { fontSize: 16, paddingVertical: 8 },
+  titleActions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
+  titleSaveBtn: {
+    backgroundColor: colors.green,
+    borderRadius: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  titleSaveText: { color: colors.onAccent, fontSize: 13, fontWeight: '700' },
+  titleCancelBtn: { paddingHorizontal: 4, paddingVertical: 7 },
+  titleCancelText: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
+  editTitleText: { color: colors.green, fontSize: 12, fontWeight: '600', marginTop: 5 },
   author: { color: colors.textDim, fontSize: 15, marginTop: 4 },
   meta: { color: colors.textDim, fontSize: 13, marginTop: 8 },
   statusRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },

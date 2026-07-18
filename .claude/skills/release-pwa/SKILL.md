@@ -13,6 +13,8 @@ Vercel project: `tanishhires-projects/bookmarked`, deployed from the owner's log
 - Same codebase; `react-native-web` renders, **expo-sqlite runs on WebAssembly** (alpha-quality upstream — expect occasional weirdness). `metro.config.js` registers `.wasm` as an asset — do not remove.
 - `app.json` web config: `"bundler": "metro", "output": "single"` (SPA; deep links handled by the rewrite in vercel.json).
 - **`scripts/postbuild-web.js` must run after every web export.** It copies `public/` (manifest, apple-touch-icon, PWA icons, og-image) into `dist/` and injects the `<head>` tags Expo's single-output HTML lacks: manifest link, apple-touch-icon (required for iOS Add-to-Home-Screen icons), theme-color, and Open Graph tags (link previews). The production URL is hardcoded as `SITE` inside it — update if the domain ever changes.
+- The same postbuild script generates `register-sw.js` and a versioned `sw.js`. It precaches the complete same-origin app shell (including SQLite WASM) and runtime-caches successful Open Library metadata/cover responses. Offline launch works only after one successful online load has installed the worker.
+- `app/_layout.tsx` acquires a named Web Lock **before** mounting `SQLiteProvider`; a second tab/window sees an explicit "already open" screen instead of a blank SQLite-WASM failure. A short localStorage lease is the fallback where Web Locks are unavailable.
 
 ## The headers that must never disappear
 

@@ -203,6 +203,14 @@ export async function setCoverUrl(
   await db.runAsync('UPDATE books SET cover_url = ? WHERE id = ?', coverUrl, id);
 }
 
+export async function setTitle(
+  db: SQLiteDatabase,
+  id: number,
+  title: string
+): Promise<void> {
+  await db.runAsync('UPDATE books SET title = ? WHERE id = ?', title, id);
+}
+
 export async function setTotalPages(
   db: SQLiteDatabase,
   id: number,

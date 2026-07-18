@@ -125,6 +125,11 @@ export default function Search() {
                 <Text style={styles.title} numberOfLines={2}>
                   {item.title}
                 </Text>
+                {item.originalTitle && (
+                  <Text style={styles.originalTitle} numberOfLines={1}>
+                    Work title: {item.originalTitle}
+                  </Text>
+                )}
                 <Text style={styles.author} numberOfLines={1}>
                   {item.author}
                   {item.year ? ` · ${item.year}` : ''}
@@ -189,6 +194,7 @@ const styles = StyleSheet.create({
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, marginLeft: 12 },
   title: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  originalTitle: { color: colors.textDim, fontSize: 12, fontStyle: 'italic', marginTop: 2 },
   author: { color: colors.textDim, fontSize: 13, marginTop: 2 },
   meta: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   addBtn: {

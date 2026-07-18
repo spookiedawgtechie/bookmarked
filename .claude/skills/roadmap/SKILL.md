@@ -25,6 +25,13 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 3. **Discover tab (recommendations)** — **claimed by the owner as his own project (2026-07-06); do not build or modify `lib/recommend.ts` / a Discover tab unless he explicitly asks.** This is intentionally his hands-on M.Tech-adjacent work, not a delegated task. Design context kept here for reference only, in case he asks for review or a second opinion: prerequisite `subjects` column (JSON array fetched with the description from the work JSON — same request, extra field, plus lazy backfill). Taste profile = rating-weighted subject counts from read/reading books. Candidates from `/subjects/<top-subjects>.json`, minus owned `ol_key`s, scored by weighted subject overlap. Three tiers: "More of the same" (same author or top-band overlap), "Similar territory" (moderate overlap, new authors), "A step forward" (fewer shared subjects + rarer/older/canonical works). Heuristics first, embeddings later.
 4. Quality of life: sort/filter on list screens, separate notes field, vector icons for tabs.
 
+## Phase review implementation (2026-07-18)
+
+- Phase 5A: slider flush, filters/metrics/accessibility were owner-verified; Android Notes now uses keyboard-height spacing plus post-animation scrolling. Review keeps its already-working behavior.
+- Phase 5B: Search prefers English-ranked edition metadata (`lang=en`) while keeping Work IDs and non-English discoverability; differing Work titles appear as secondary context; users can manually edit stored titles.
+- Phase 6: PWA gets a generated offline app shell and blocks a second tab before SQLite initializes, with a clear retry screen.
+- Phase 7 custom/user-supplied covers remains deferred as a separate large, portable-storage update. Do not add gallery/compression/ZIP-backup work until the owner reopens it.
+
 ## Explicitly rejected
 
 - Social/accounts (personal app), barcode scanning (search is fast enough; camera lib risk in Expo Go), generic state-management libraries (DB-on-focus pattern is the architecture), `updateBook(fields)`-style generic setters.
