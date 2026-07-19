@@ -148,10 +148,11 @@ export default function Stats() {
                   getAllReadingHistory(db).then(setReadings);
                   getAllSessions(db).then(setSessions);
                 }
-              } catch {
+              } catch (error) {
+                const reason = error instanceof Error ? `\n\nReason: ${error.message}` : '';
                 notify(
                   'Import failed',
-                  'The file is invalid or could not be imported. No partial changes were saved.'
+                  `The file is invalid or could not be imported. No partial changes were saved.${reason}`
                 );
               }
             },

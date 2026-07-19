@@ -4,6 +4,7 @@ import {
   createBackupPayload,
   importBackupPayload,
   parseBackupPayload,
+  parseBackupText,
   type BackupV3,
 } from '../lib/backup';
 import {
@@ -150,6 +151,48 @@ test('legacy schema v2 backups normalize into deterministic v3 identities', () =
   assert.equal(normalized.libraryItems[0].uid, 'item:/works/OL1W:1');
   assert.equal(normalized.readingEntries[0].uid, 'reading:/works/OL1W:1');
   assert.match(normalized.sessions[0].uid, /^session:\/works\/OL1W:/);
+});
+
+test('old APK backups sanitize legacy values, tolerate a BOM, and import fully', async () => {
+  const normalized = parseBackupText(`\uFEFF${JSON.stringify({
+    app: 'bookmarked',
+    schemaVersion: 2,
+    exportedAt: '2024-01-01T00:00:00.000Z',
+    books: [
+      {
+        ol_key: '/works/OL1W',
+        title: 'The Odyssey',
+        author: 'Homer',
+        status: 'reading',
+        current_page: '42',
+        total_pages: 0,
+        rating: 0,
+        added_at: '2023-01-01T00:00:00.000Z',
+        updated_at: null,
+      },
+    ],
+    sessions: [
+      {
+        book_ol_key: '/works/deleted',
+        logged_at: 'not-a-date',
+        from_page: 0,
+        to_page: 10,
+      },
+    ],
+  })}`);
+
+  assert.equal(normalized.libraryItems[0].totalPages, null);
+  assert.equal(normalized.readingEntries[0].currentPage, 42);
+  assert.equal(normalized.readingEntries[0].rating, null);
+  assert.equal(normalized.sessions.length, 0);
+
+  const target = await emptyDatabase();
+  const summary = await importBackupPayload(target.asDatabase(), normalized);
+  const restored = (await getAllBooks(target.asDatabase()))[0];
+  assert.ok(summary.changed >= 3);
+  assert.equal(restored.title, 'The Odyssey');
+  assert.equal(restored.currentPage, 42);
+  assert.equal(restored.totalPages, null);
 });
 
 test('validation rejects malformed relationships before any database write', async () => {

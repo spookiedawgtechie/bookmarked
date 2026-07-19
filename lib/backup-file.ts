@@ -2,7 +2,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
-import { createBackupPayload, importBackupPayload, type ImportSummary } from './backup';
+import {
+  createBackupPayload,
+  importBackupPayload,
+  parseBackupText,
+  type ImportSummary,
+} from './backup';
 import { shareFile } from './share';
 
 export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
@@ -28,5 +33,5 @@ export async function importLibrary(db: SQLiteDatabase): Promise<ImportSummary |
       ? await asset.file.text()
       : await (await fetch(asset.uri)).text()
     : await FileSystem.readAsStringAsync(asset.uri);
-  return importBackupPayload(db, JSON.parse(text) as unknown);
+  return importBackupPayload(db, parseBackupText(text));
 }

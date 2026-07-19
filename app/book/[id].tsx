@@ -45,10 +45,10 @@ const STATUSES: { value: BookStatus; label: string; accent: string }[] = [
   { value: 'read', label: 'Read', accent: colors.orange },
 ];
 
-const OWNERSHIP: { value: BookOwnership; label: string }[] = [
-  { value: 'owned', label: 'Owned' },
-  { value: 'wishlist', label: 'Wishlist' },
-  { value: 'borrowed', label: 'Borrowed' },
+const OWNERSHIP: { value: BookOwnership; label: string; accent: string }[] = [
+  { value: 'owned', label: 'Owned', accent: colors.green },
+  { value: 'wishlist', label: 'Wishlist', accent: colors.blue },
+  { value: 'borrowed', label: 'Borrowed', accent: colors.orange },
 ];
 
 export default function BookDetail() {
@@ -450,13 +450,23 @@ export default function BookDetail() {
               return (
                 <Pressable
                   key={option.value}
-                  style={[styles.statusBtn, active && { backgroundColor: colors.blue }]}
+                  style={[
+                    styles.statusBtn,
+                    { borderColor: option.accent },
+                    active && { backgroundColor: option.accent },
+                  ]}
                   onPress={() => onOwnership(option.value)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={option.label}
                 >
-                  <Text style={[styles.statusBtnText, active && { color: colors.onAccent }]}>
+                  <Text
+                    style={[
+                      styles.statusBtnText,
+                      { color: option.accent },
+                      active && { color: colors.onAccent },
+                    ]}
+                  >
                     {option.label}
                   </Text>
                 </Pressable>
@@ -465,24 +475,41 @@ export default function BookDetail() {
           </View>
         </View>
 
-        <View style={styles.statusRow} accessibilityRole="radiogroup" accessibilityLabel="Reading status">
-          {STATUSES.map((s) => {
-            const active = book.status === s.value;
-            return (
-              <Pressable
-                key={s.value}
-                style={[styles.statusBtn, active && { backgroundColor: s.accent }]}
-                onPress={() => onStatus(s.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={s.label}
-              >
-                <Text style={[styles.statusBtnText, active && { color: colors.onAccent }]}>
-                  {s.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>Reading status</Text>
+          <View
+            style={styles.statusRow}
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Reading status"
+          >
+            {STATUSES.map((s) => {
+              const active = book.status === s.value;
+              return (
+                <Pressable
+                  key={s.value}
+                  style={[
+                    styles.statusBtn,
+                    { borderColor: s.accent },
+                    active && { backgroundColor: s.accent },
+                  ]}
+                  onPress={() => onStatus(s.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={s.label}
+                >
+                  <Text
+                    style={[
+                      styles.statusBtnText,
+                      { color: s.accent },
+                      active && { color: colors.onAccent },
+                    ]}
+                  >
+                    {s.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         {(descLoading || (book.description ?? '') !== '') && (
@@ -847,17 +874,24 @@ const styles = StyleSheet.create({
   editTitleText: { color: colors.green, fontSize: 12, fontWeight: '600', marginTop: 5 },
   author: { color: colors.textDim, fontSize: 15, marginTop: 4 },
   meta: { color: colors.textDim, fontSize: 13, marginTop: 8 },
-  statusRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  statusRow: { flexDirection: 'row', gap: 8 },
   statusBtn: {
     flex: 1,
     backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  statusBtnText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  statusBtnText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   block: {
     backgroundColor: colors.card,
     borderRadius: 12,

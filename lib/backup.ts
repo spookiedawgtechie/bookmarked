@@ -257,11 +257,32 @@ function normalizeV3(payload: Record<string, unknown>): BackupV3 {
 }
 
 function legacyString(row: Record<string, unknown>, key: string): string | null {
-  return nullableString(row[key], key);
+  return typeof row[key] === 'string' ? row[key] : null;
+}
+
+function legacyDate(value: unknown): string | null {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value))
+    ? new Date(value).toISOString()
+    : null;
+}
+
+function legacyNonNegativeInteger(value: unknown): number {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
+}
+
+function legacyPositiveIntegerOrNull(value: unknown): number | null {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(number) && number > 0 ? Math.round(number) : null;
+}
+
+function legacyRatingOrNull(value: unknown): number | null {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(number) && number >= 0.5 && number <= 10 ? number : null;
 }
 
 function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
-  const exportedAt = (isoDate(payload.exportedAt, 'exportedAt', true) ?? new Date().toISOString()) as string;
+  const exportedAt = legacyDate(payload.exportedAt) ?? new Date().toISOString();
   const rawBooks = asArray(payload.books, 'books').map((value, index) => asRecord(value, `books[${index}]`));
   const works: BackupWork[] = [];
   const libraryItems: BackupLibraryItem[] = [];
@@ -272,10 +293,10 @@ function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
     if (bookKeys.has(olKey)) throw new Error('Legacy backup contains duplicate books');
     bookKeys.add(olKey);
     const title = requiredString(row.title, `books[${index}].title`);
-    const addedAt = (isoDate(row.added_at, `books[${index}].added_at`, true) ?? exportedAt) as string;
-    const startedAt = isoDate(row.started_at, `books[${index}].started_at`, true);
-    const finishedAt = isoDate(row.finished_at, `books[${index}].finished_at`, true);
-    const updatedAt = (isoDate(row.updated_at, `books[${index}].updated_at`, true) ?? finishedAt ?? startedAt ?? addedAt) as string;
+    const addedAt = legacyDate(row.added_at) ?? exportedAt;
+    const startedAt = legacyDate(row.started_at);
+    const finishedAt = legacyDate(row.finished_at);
+    const updatedAt = legacyDate(row.updated_at) ?? finishedAt ?? startedAt ?? addedAt;
     const statusCandidate = typeof row.status === 'string' ? row.status as BookStatus : 'want';
     const status = VALID_STATUSES.has(statusCandidate) ? statusCandidate : 'want';
     const workUid = `work:${olKey}`;
@@ -300,7 +321,7 @@ function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
       publishDate: null,
       language: null,
       coverUrl: legacyString(row, 'cover_url'),
-      totalPages: positiveIntegerOrNull(row.total_pages, `books[${index}].total_pages`),
+      totalPages: legacyPositiveIntegerOrNull(row.total_pages),
       notes: legacyString(row, 'notes'),
       addedAt,
       updatedAt,
@@ -310,8 +331,8 @@ function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
       libraryItemUid: itemUid,
       sequence: 1,
       status,
-      currentPage: nonNegativeInteger(row.current_page ?? 0, `books[${index}].current_page`),
-      rating: ratingOrNull(row.rating, `books[${index}].rating`),
+      currentPage: legacyNonNegativeInteger(row.current_page),
+      rating: legacyRatingOrNull(row.rating),
       review: legacyString(row, 'review'),
       startedAt,
       finishedAt,
@@ -319,23 +340,32 @@ function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
       updatedAt,
     });
   }
-  const sessions = asArray(payload.sessions ?? [], 'sessions').map((value, index): BackupSession => {
+  const sessions: BackupSession[] = [];
+  for (const [index, value] of asArray(payload.sessions ?? [], 'sessions').entries()) {
     const row = asRecord(value, `sessions[${index}]`);
-    const olKey = requiredString(row.book_ol_key, `sessions[${index}].book_ol_key`);
-    if (!bookKeys.has(olKey)) throw new Error(`sessions[${index}] references an unknown book`);
-    const loggedAt = isoDate(row.logged_at, `sessions[${index}].logged_at`) as string;
-    const fromPage = nonNegativeInteger(row.from_page, `sessions[${index}].from_page`);
-    const toPage = nonNegativeInteger(row.to_page, `sessions[${index}].to_page`);
-    return {
+    const olKey = typeof row.book_ol_key === 'string' ? row.book_ol_key : null;
+    const loggedAt = legacyDate(row.logged_at);
+    const fromPage = legacyNonNegativeInteger(row.from_page);
+    const toPage = legacyNonNegativeInteger(row.to_page);
+    if (!olKey || !bookKeys.has(olKey) || !loggedAt) continue;
+    sessions.push({
       uid: `session:${olKey}:${loggedAt}:${fromPage}:${toPage}`,
       readingEntryUid: `reading:${olKey}:1`,
       loggedAt,
       fromPage,
       toPage,
       updatedAt: loggedAt,
-    };
-  });
+    });
+  }
   return { app: 'bookmarked', schemaVersion: 3, exportedAt, works, libraryItems, readingEntries, sessions, tombstones: [] };
+}
+
+export function parseBackupText(text: string): BackupV3 {
+  const withoutBom = text.replace(/^\uFEFF/, '').trim();
+  const parsed = JSON.parse(withoutBom) as unknown;
+  return parseBackupPayload(
+    typeof parsed === 'string' ? JSON.parse(parsed) as unknown : parsed
+  );
 }
 
 export function parseBackupPayload(value: unknown): BackupV3 {
