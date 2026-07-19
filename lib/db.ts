@@ -1,7 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Book, BookOwnership, BookStatus, ReadingSession } from './types';
 
-export const DATABASE_VERSION = 3;
+const RELATIONAL_SCHEMA_VERSION = 3;
+export const DATABASE_VERSION = 4;
 
 function createUid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
@@ -235,6 +236,34 @@ async function migrateLegacyToV3(db: SQLiteDatabase): Promise<void> {
     'PRAGMA foreign_key_check'
   );
   if (foreignKeyFailure) throw new Error('Bookmarked migration created an orphaned row');
+  await db.execAsync(`PRAGMA user_version = ${RELATIONAL_SCHEMA_VERSION};`);
+}
+
+async function migrateV3ToV4(db: SQLiteDatabase): Promise<void> {
+  const rows = await db.getAllAsync<{ name: string }>('PRAGMA table_info(library_items)');
+  const columns = new Set(rows.map((row) => row.name));
+  const additions = [
+    ['edition_key', 'ALTER TABLE library_items ADD COLUMN edition_key TEXT'],
+    ['isbn', 'ALTER TABLE library_items ADD COLUMN isbn TEXT'],
+    ['publisher', 'ALTER TABLE library_items ADD COLUMN publisher TEXT'],
+    ['publish_date', 'ALTER TABLE library_items ADD COLUMN publish_date TEXT'],
+    ['language', 'ALTER TABLE library_items ADD COLUMN language TEXT'],
+  ] as const;
+  for (const [column, ddl] of additions) {
+    if (!columns.has(column)) await db.execAsync(ddl);
+  }
+
+  const migratedRows = await db.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(library_items)'
+  );
+  const migratedColumns = new Set(migratedRows.map((row) => row.name));
+  if (additions.some(([column]) => !migratedColumns.has(column))) {
+    throw new Error('Bookmarked edition metadata migration failed');
+  }
+  const foreignKeyFailure = await db.getFirstAsync<Record<string, unknown>>(
+    'PRAGMA foreign_key_check'
+  );
+  if (foreignKeyFailure) throw new Error('Bookmarked edition migration found an orphaned row');
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION};`);
 }
 
@@ -247,9 +276,12 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
   }
   if (version === DATABASE_VERSION) return;
 
-  await prepareLegacySchema(db);
   await db.withTransactionAsync(async () => {
-    await migrateLegacyToV3(db);
+    if (version < RELATIONAL_SCHEMA_VERSION) {
+      await prepareLegacySchema(db);
+      await migrateLegacyToV3(db);
+    }
+    await migrateV3ToV4(db);
   });
   await db.execAsync('PRAGMA foreign_keys = ON;');
 }

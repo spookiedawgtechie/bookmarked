@@ -53,6 +53,87 @@ function seedLegacyDatabase(adapter: NodeSQLiteAdapter): void {
   `);
 }
 
+function seedPartialV3Database(adapter: NodeSQLiteAdapter): void {
+  adapter.raw.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE works (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      ol_key TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT '',
+      description TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE library_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      work_id INTEGER NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      ownership TEXT NOT NULL,
+      cover_url TEXT,
+      total_pages INTEGER,
+      notes TEXT,
+      added_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE reading_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      library_item_id INTEGER NOT NULL REFERENCES library_items(id) ON DELETE CASCADE,
+      sequence INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      current_page INTEGER NOT NULL DEFAULT 0,
+      rating REAL,
+      review TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(library_item_id, sequence)
+    );
+    CREATE TABLE sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      reading_entry_id INTEGER NOT NULL REFERENCES reading_entries(id) ON DELETE CASCADE,
+      logged_at TEXT NOT NULL,
+      from_page INTEGER NOT NULL,
+      to_page INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE tombstones (
+      entity_type TEXT NOT NULL,
+      uid TEXT NOT NULL,
+      deleted_at TEXT NOT NULL,
+      PRIMARY KEY (entity_type, uid)
+    );
+    CREATE TABLE app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    INSERT INTO works
+      (uid, ol_key, title, author, description, created_at, updated_at)
+    VALUES
+      ('work:/works/OL1W', '/works/OL1W', 'The Odyssey', 'Homer', NULL,
+       '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z');
+    INSERT INTO library_items
+      (uid, work_id, title, ownership, cover_url, total_pages, notes, added_at, updated_at)
+    VALUES
+      ('item:/works/OL1W:1', 1, 'The Odyssey', 'owned', 'cover-1', 300,
+       'Existing copy', '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z');
+    INSERT INTO reading_entries
+      (uid, library_item_id, sequence, status, current_page, rating, review,
+       started_at, finished_at, created_at, updated_at)
+    VALUES
+      ('reading:/works/OL1W:1', 1, 1, 'reading', 42, NULL, NULL,
+       '2024-01-01T00:00:00.000Z', NULL,
+       '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z');
+    PRAGMA user_version = 3;
+  `);
+}
+
 test('legacy books migrate transactionally into works, copies, readings, and sessions', async () => {
   const adapter = new NodeSQLiteAdapter();
   seedLegacyDatabase(adapter);
@@ -97,4 +178,31 @@ test('a migration failure restores the untouched legacy tables and version', asy
   );
   assert.equal((adapter.raw.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 0);
   assert.equal((adapter.raw.prepare('SELECT COUNT(*) AS n FROM books').get() as { n: number }).n, 2);
+});
+
+test('partial v3 databases gain edition columns without losing library data', async () => {
+  const adapter = new NodeSQLiteAdapter();
+  seedPartialV3Database(adapter);
+
+  await migrate(adapter.asDatabase());
+
+  const columns = adapter.raw.prepare('PRAGMA table_info(library_items)').all() as Array<{
+    name: string;
+  }>;
+  const names = new Set(columns.map((column) => column.name));
+  for (const column of ['edition_key', 'isbn', 'publisher', 'publish_date', 'language']) {
+    assert.equal(names.has(column), true);
+  }
+  assert.equal(
+    (adapter.raw.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
+    DATABASE_VERSION
+  );
+  const books = await getAllBooks(adapter.asDatabase());
+  assert.equal(books.length, 1);
+  assert.equal(books[0].currentPage, 42);
+  assert.equal(books[0].notes, 'Existing copy');
+  assert.equal(books[0].editionKey, null);
+
+  await migrate(adapter.asDatabase());
+  assert.equal((await getAllBooks(adapter.asDatabase())).length, 1);
 });

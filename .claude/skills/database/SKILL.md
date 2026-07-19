@@ -9,12 +9,13 @@ description: Bookmarked's versioned SQLite v3 schema, migration, rereads, owners
 
 ## Versioning and migration
 
-- Current `PRAGMA user_version` is **3** (`DATABASE_VERSION`). Never return to ad hoc ALTER-only migrations.
+- Current `PRAGMA user_version` is **4** (`DATABASE_VERSION`). Never return to ad hoc ALTER-only migrations.
 - A v1/v2 install has `books` plus page-delta `sessions`. Migration first completes the old additive columns/backfill, then performs all renames, v3 table creation, copies, integrity counts, `foreign_key_check`, and `user_version` update in **one transaction**.
 - Old tables remain as `legacy_books_v1` and `legacy_sessions_v2`, an emergency read-only snapshot. They are not queried by the running app.
 - Migrated identities are deterministic across APK/PWA: `work:<ol_key>`, `item:<ol_key>:1`, `reading:<ol_key>:1`, and a session UID derived from work/date/pages. Random IDs here would duplicate the same migrated copy during cross-device import.
 - Migration must preserve Work count = item count = reading count and old/new session count. Any mismatch throws and rolls the whole transaction back; tests use real in-memory SQLite and deliberately inject a mid-migration failure.
 - Do not raise `DATABASE_VERSION` without a new explicit version step and upgrade fixture. A newer unknown database version must fail closed.
+- v3 -> v4 repairs development-preview databases that were stamped v3 before the nullable edition metadata columns were finalized. It inspects `PRAGMA table_info(library_items)`, adds only missing columns, preserves every row, validates foreign keys, and is covered by a partial-v3 fixture.
 
 ## v3 ownership model
 
