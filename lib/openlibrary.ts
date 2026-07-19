@@ -17,7 +17,7 @@ export function sanitizeDescription(value: string): string {
     .trim();
 }
 
-interface OLDoc {
+export interface OpenLibrarySearchDoc {
   key: string;
   title: string;
   author_name?: string[];
@@ -31,6 +31,29 @@ interface OLDoc {
       number_of_pages?: number;
       language?: string[];
     }[];
+  };
+}
+
+export function mapOpenLibraryDoc(d: OpenLibrarySearchDoc): SearchResult {
+  // `lang=en` influences the single nested edition selected by Open
+  // Library without excluding works that only match another language.
+  // Keep the Work key as identity, but display the selected edition's
+  // metadata when present (especially important for translated classics).
+  const edition = d.editions?.docs?.[0];
+  const preferredTitle = edition?.title?.trim() || d.title;
+  const originalTitle =
+    preferredTitle.localeCompare(d.title, undefined, { sensitivity: 'base' }) === 0
+      ? null
+      : d.title;
+  const coverId = edition?.cover_i ?? d.cover_i;
+  return {
+    key: d.key,
+    title: preferredTitle,
+    originalTitle,
+    author: d.author_name?.join(', ') ?? 'Unknown author',
+    coverUrl: coverId ? coverUrl(coverId) : null,
+    pages: edition?.number_of_pages ?? d.number_of_pages_median ?? null,
+    year: d.first_publish_year ?? null,
   };
 }
 
@@ -81,27 +104,6 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
     '&limit=25';
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`Open Library returned ${res.status}`);
-  const json = (await res.json()) as { docs: OLDoc[] };
-  return json.docs.map((d) => {
-    // `lang=en` influences the single nested edition selected by Open
-    // Library without excluding works that only match another language.
-    // Keep the Work key as identity, but display the selected edition's
-    // metadata when present (especially important for translated classics).
-    const edition = d.editions?.docs?.[0];
-    const preferredTitle = edition?.title?.trim() || d.title;
-    const originalTitle =
-      preferredTitle.localeCompare(d.title, undefined, { sensitivity: 'base' }) === 0
-        ? null
-        : d.title;
-    const coverId = edition?.cover_i ?? d.cover_i;
-    return {
-      key: d.key,
-      title: preferredTitle,
-      originalTitle,
-      author: d.author_name?.join(', ') ?? 'Unknown author',
-      coverUrl: coverId ? coverUrl(coverId) : null,
-      pages: edition?.number_of_pages ?? d.number_of_pages_median ?? null,
-      year: d.first_publish_year ?? null,
-    };
-  });
+  const json = (await res.json()) as { docs: OpenLibrarySearchDoc[] };
+  return json.docs.map(mapOpenLibraryDoc);
 }

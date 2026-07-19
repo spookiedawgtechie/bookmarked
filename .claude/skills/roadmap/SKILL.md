@@ -32,6 +32,12 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 - Phase 6: PWA gets a generated offline app shell and blocks a second tab before SQLite initializes, with a clear retry screen.
 - Phase 7 custom/user-supplied covers remains deferred as a separate large, portable-storage update. Do not add gallery/compression/ZIP-backup work until the owner reopens it.
 
+## v2 migration foundation (2026-07-19)
+
+- Phase 1 is implemented: lightweight regression tests cover stats, Open Library edition mapping, and database transaction behavior; GitHub Actions runs tests, strict typecheck, and Android/web production exports on Node 22.
+- `logProgress` now commits its session delta, current-page update, and automatic read transition in one cross-platform transaction. Direct status changes do not fabricate a session because historical books may be backdated.
+- Still pending owner/device verification before schema work: final-page auto-completion through both Shelf and detail flows. Do not start the versioned `works` / `library_items` / `reading_entries` migration until this foundation is accepted.
+
 ## Explicitly rejected
 
 - Social/accounts (personal app), barcode scanning (search is fast enough; camera lib risk in Expo Go), generic state-management libraries (DB-on-focus pattern is the architecture), `updateBook(fields)`-style generic setters.

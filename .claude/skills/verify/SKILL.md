@@ -5,9 +5,17 @@ description: Validation workflow for any Bookmarked change — typecheck, native
 
 # Verify a change
 
-No test suite exists (deliberate for a personal app); these three gates catch almost everything instead. Run from the project root.
+Run all gates from the project root. GitHub Actions repeats the automated gates on every push and pull request with Node 22.
 
-## Gate 1 — TypeScript (always)
+## Gate 1 — regression tests (always)
+
+```
+npm test
+```
+
+The lightweight `node:test` suite runs through `tsx` and covers stats math, Open Library metadata mapping, and transaction rollback/atomic-completion behavior. Add a focused regression test whenever a pure function or database invariant changes.
+
+## Gate 2 — TypeScript (always)
 
 ```
 npx tsc --noEmit
@@ -15,7 +23,7 @@ npx tsc --noEmit
 
 Must exit 0. The codebase is strict-typed; new `any`s are a smell.
 
-## Gate 2 — native bundle (always)
+## Gate 3 — native bundle (always)
 
 ```
 npx expo export --platform android
@@ -27,7 +35,7 @@ This runs the real Metro production bundle (~25s) and catches broken imports, sy
 Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
-## Gate 3 — web smoke test (when UI or lib/ changed)
+## Gate 4 — web smoke test (when UI or lib/ changed)
 
 ```
 npx expo export --platform web
@@ -43,7 +51,7 @@ Bundle gates don't measure feel. For slider behavior, keyboard handling, navigat
 
 ## Commit
 
-Commit after every verified, coherent change — this repo has no remote, so local history is the only safety net.
+Commit after every verified, coherent change and push it to `origin`; the GitHub CI result is the final automated check.
 
 ```
 git add -A

@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run export:android
+      - run: rm -rf dist
+      - run: npm run export:web
+      - run: npm run postbuild:web
+      - run: node --check dist/sw.js
+      - run: node --check dist/register-sw.js

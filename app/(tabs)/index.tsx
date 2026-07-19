@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { notify } from '../../lib/alert';
-import { getAllBooks, getAllSessions, logProgress, setStatus } from '../../lib/db';
+import { getAllBooks, getAllSessions, logProgress } from '../../lib/db';
 import { currentStreakDays, pagesInLastDays, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
@@ -191,9 +191,6 @@ export default function Shelf() {
     setSaving(true);
     try {
       await logProgress(db, logBook.id, logBook.currentPage, logPage);
-      if (logBook.totalPages && logPage >= logBook.totalPages) {
-        await setStatus(db, logBook.id, 'read');
-      }
       setLogBook(null);
       refresh();
     } catch {

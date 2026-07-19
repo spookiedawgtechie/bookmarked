@@ -148,6 +148,8 @@ export async function setStatus(
       id
     );
   } else if (status === 'read') {
+    // Do not invent a session here: users can backdate an old finished book,
+    // and attributing all of its pages to today would corrupt yearly stats.
     await db.runAsync(
       `UPDATE books SET status = ?, started_at = COALESCE(started_at, ?), finished_at = ?,
        current_page = COALESCE(total_pages, current_page), updated_at = ? WHERE id = ?`,
@@ -176,23 +178,38 @@ export async function logProgress(
   id: number,
   fromPage: number,
   toPage: number
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date().toISOString();
-  if (toPage !== fromPage) {
+  let completed = false;
+  await db.withTransactionAsync(async () => {
+    if (toPage !== fromPage) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO sessions (book_id, logged_at, from_page, to_page) VALUES (?, ?, ?, ?)',
+        id,
+        now,
+        fromPage,
+        toPage
+      );
+    }
     await db.runAsync(
-      'INSERT OR IGNORE INTO sessions (book_id, logged_at, from_page, to_page) VALUES (?, ?, ?, ?)',
-      id,
+      'UPDATE books SET current_page = ?, updated_at = ? WHERE id = ?',
+      toPage,
       now,
-      fromPage,
+      id
+    );
+    const result = await db.runAsync(
+      `UPDATE books SET status = 'read', started_at = COALESCE(started_at, ?),
+       finished_at = ?, current_page = total_pages, updated_at = ?
+       WHERE id = ? AND status <> 'read' AND total_pages IS NOT NULL AND ? >= total_pages`,
+      now,
+      now,
+      now,
+      id,
       toPage
     );
-  }
-  await db.runAsync(
-    'UPDATE books SET current_page = ?, updated_at = ? WHERE id = ?',
-    toPage,
-    now,
-    id
-  );
+    completed = result.changes > 0;
+  });
+  return completed;
 }
 
 export async function setCoverUrl(

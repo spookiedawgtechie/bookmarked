@@ -30,7 +30,7 @@ Single SQLite database `bookmarked.db`, opened by `SQLiteProvider` in `app/_layo
 
 One row per progress edit (page delta). `id, book_id, logged_at TEXT, from_page INTEGER, to_page INTEGER`, `UNIQUE(book_id, logged_at, from_page, to_page)` to make repeated writes/imports idempotent. **This is the only source of truth for "how many pages did I read and when"** — `books.current_page` is just the current position, not history.
 
-- **`logProgress(db, id, fromPage, toPage)`** in `lib/db.ts` is the single write path for progress — it inserts a session row (skipped if `fromPage === toPage`) AND updates `books.current_page`/`updated_at` in one call. **There is no `setProgress` anymore** — screens must never write `current_page` directly, or session history silently stops matching reality. Both call sites (`app/(tabs)/index.tsx` log-progress modal, `app/book/[id].tsx` slider) pass the last-known persisted page as `fromPage` — the detail screen keeps this in a `persistedPageRef` (not `book.currentPage`) so multiple debounced writes in one visit each produce an accurate delta, not one big delta from stale state.
+- **`logProgress(db, id, fromPage, toPage)`** in `lib/db.ts` is the single write path for progress — inside one cross-platform SQLite transaction it inserts a session row (skipped if `fromPage === toPage`), updates `books.current_page`/`updated_at`, and auto-completes the book when the logged page reaches `total_pages`. It returns whether that write transitioned the book to `read`. **There is no `setProgress` anymore** — screens must never write `current_page` directly, or session history silently stops matching reality. Both call sites (`app/(tabs)/index.tsx` log-progress modal, `app/book/[id].tsx` slider) pass the last-known persisted page as `fromPage` — the detail screen keeps this in a `persistedPageRef` (not `book.currentPage`) so multiple debounced writes in one visit each produce an accurate delta, not one big delta from stale state.
 - **One-time backfill in `migrate()`**: for any book with `current_page > 0` and zero existing sessions, inserts a single historical session `0 → current_page` dated `finished_at ?? started_at ?? added_at`. Runs every launch but is a no-op once a book has any real session (idempotent via the `id NOT IN (SELECT book_id FROM sessions)` guard) — this is what keeps pre-sessions libraries from losing stats history.
 - `deleteBook` deletes the book's sessions first (no FK/cascade is declared — deliberately explicit for portability across the native/wasm SQLite builds).
 - Backup: `exportLibrary` joins sessions to `books.ol_key` (not the local numeric id, which is meaningless on another device) so `importLibrary` can re-link them to the right local book by key. Old (schemaVersion 1) backups simply have no `sessions` field — import treats that as zero sessions, not an error.
@@ -41,9 +41,9 @@ One row per progress edit (page delta). `id, book_id, logged_at TEXT, from_page 
 - → `reading`: `started_at = COALESCE(started_at, now)` — start date is written once, never clobbered by status toggling. Clears `finished_at`.
 - → `read`: same COALESCE for `started_at` (covers marking read directly), stamps `finished_at = now`, snaps `current_page = COALESCE(total_pages, current_page)`.
 - → `want`: clears `finished_at` (a wishlisted book is by definition not finished — keeps stats honest).
-- `setProgress`/`setStatus` also stamp `updated_at = now`.
+- `logProgress`/`setStatus` also stamp `updated_at = now`.
 - Backdating: the detail screen writes user-entered `YYYY-MM-DD` as `<date>T12:00:00.000Z` via `setFinishedDate` (noon UTC avoids timezone date-shifts).
-- Sliding the progress slider to the last page auto-marks the book `read` (logic in `app/book/[id].tsx`).
+- Logging the last page auto-marks the book `read` inside `logProgress`'s transaction, so the session, current page, and lifecycle cannot partially commit. Directly choosing `read` in the status UI deliberately does not invent a session: an old book may be backdated afterward, and crediting every page to today would corrupt yearly stats.
 
 ## Stats math (what the numbers mean)
 

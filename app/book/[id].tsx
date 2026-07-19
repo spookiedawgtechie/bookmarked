@@ -72,7 +72,6 @@ export default function BookDetail() {
   const persistedPageRef = useRef(0);
   const pendingPageRef = useRef<number | null>(null);
   const pendingRatingRef = useRef<number | null>(null);
-  const totalPagesRef = useRef<number | null>(null);
   const progressWriteRef = useRef<Promise<void>>(Promise.resolve());
   const ratingWriteRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useRef(true);
@@ -88,7 +87,6 @@ export default function BookDetail() {
       setNotesDraft(b.notes ?? '');
       setTitleDraft(b.title);
       setRatingDraft(b.rating ?? 0);
-      totalPagesRef.current = b.totalPages;
     }
   }, [db, bookId]);
 
@@ -184,12 +182,9 @@ export default function BookDetail() {
     progressWriteRef.current = progressWriteRef.current
       .then(async () => {
         const from = persistedPageRef.current;
-        await logProgress(db, bookId, from, value);
+        const completed = await logProgress(db, bookId, from, value);
         persistedPageRef.current = value;
-        if (totalPagesRef.current && value >= totalPagesRef.current) {
-          await setStatus(db, bookId, 'read');
-          if (mountedRef.current) await reload();
-        }
+        if (completed && mountedRef.current) await reload();
       })
       .catch(() => {
         if (reportError && mountedRef.current) {
