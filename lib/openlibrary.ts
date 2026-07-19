@@ -3,6 +3,11 @@ export interface SearchResult {
   title: string;
   originalTitle: string | null;
   author: string;
+  editionKey: string | null;
+  isbn: string | null;
+  publisher: string | null;
+  publishDate: string | null;
+  language: string | null;
   coverUrl: string | null;
   pages: number | null;
   year: number | null;
@@ -27,6 +32,10 @@ export interface OpenLibrarySearchDoc {
   editions?: {
     docs?: {
       title?: string;
+      key?: string;
+      isbn?: string[];
+      publisher?: string[];
+      publish_date?: string[];
       cover_i?: number;
       number_of_pages?: number;
       language?: string[];
@@ -51,6 +60,11 @@ export function mapOpenLibraryDoc(d: OpenLibrarySearchDoc): SearchResult {
     title: preferredTitle,
     originalTitle,
     author: d.author_name?.join(', ') ?? 'Unknown author',
+    editionKey: edition?.key ?? null,
+    isbn: edition?.isbn?.[0] ?? null,
+    publisher: edition?.publisher?.[0] ?? null,
+    publishDate: edition?.publish_date?.[0] ?? null,
+    language: edition?.language?.[0] ?? null,
     coverUrl: coverId ? coverUrl(coverId) : null,
     pages: edition?.number_of_pages ?? d.number_of_pages_median ?? null,
     year: d.first_publish_year ?? null,
@@ -100,7 +114,8 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
     encodeURIComponent(query) +
     '&lang=en' +
     '&fields=key,title,author_name,cover_i,number_of_pages_median,first_publish_year,' +
-    'editions,editions.title,editions.language,editions.cover_i,editions.number_of_pages' +
+    'editions,editions.key,editions.title,editions.language,editions.isbn,' +
+    'editions.publisher,editions.publish_date,editions.cover_i,editions.number_of_pages' +
     '&limit=25';
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`Open Library returned ${res.status}`);

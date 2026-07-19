@@ -3,8 +3,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { confirmDialog, notify } from '../../lib/alert';
-import { exportLibrary, importLibrary } from '../../lib/backup';
-import { getAllBooks, getAllSessions } from '../../lib/db';
+import { exportLibrary, importLibrary } from '../../lib/backup-file';
+import { getAllBooks, getAllReadingHistory, getAllSessions } from '../../lib/db';
 import { pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
@@ -21,17 +21,19 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export default function Stats() {
   const db = useSQLiteContext();
   const [books, setBooks] = useState<Book[]>([]);
+  const [readings, setReadings] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       getAllBooks(db).then(setBooks);
+      getAllReadingHistory(db).then(setReadings);
       getAllSessions(db).then(setSessions);
     }, [db])
   );
 
   const year = new Date().getFullYear();
-  const finished = books.filter((b) => b.status === 'read' && b.finishedAt);
+  const finished = readings.filter((b) => b.status === 'read' && b.finishedAt);
   const finishedThisYear = finished.filter(
     (b) => new Date(b.finishedAt!).getFullYear() === year
   );
@@ -130,25 +132,30 @@ export default function Stats() {
       <Pressable
         style={styles.recapRow}
         onPress={() =>
-          // Import overwrites matching books unconditionally (no
-          // last-write-wins) — restoring an old backup over newer on-device
-          // data is silent data loss, so it gets a confirm.
           confirmDialog(
-            'Import backup',
-            'Books in the file will overwrite matching books on this device, even if the backup is older than your current data.',
-            'Import',
+            'Merge backup',
+            'Bookmarked will validate the entire file, import only newer records, and keep newer changes already on this device.',
+            'Merge backup',
             async () => {
               try {
-                const count = await importLibrary(db);
-                if (count !== null) {
-                  notify('Import complete', `${count} books imported or updated.`);
+                const summary = await importLibrary(db);
+                if (summary !== null) {
+                  notify(
+                    'Import complete',
+                    `${summary.changed} newer records imported or updated; ${summary.skipped} older or unchanged records kept.`
+                  );
                   getAllBooks(db).then(setBooks);
+                  getAllReadingHistory(db).then(setReadings);
                   getAllSessions(db).then(setSessions);
                 }
               } catch {
-                notify('Import failed', 'That file is not a Bookmarked backup.');
+                notify(
+                  'Import failed',
+                  'The file is invalid or could not be imported. No partial changes were saved.'
+                );
               }
-            }
+            },
+            false
           )
         }
         accessibilityRole="button"

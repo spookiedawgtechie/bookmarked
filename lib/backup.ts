@@ -1,167 +1,605 @@
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { Platform } from 'react-native';
-import { shareFile } from './share';
+import type { BookOwnership, BookStatus } from './types';
 
-// Full-library JSON dump. On web this doubles as insurance against Safari
-// evicting site storage; on Android it's a general backup you can save anywhere.
-export async function exportLibrary(db: SQLiteDatabase): Promise<void> {
-  const books = await db.getAllAsync('SELECT * FROM books');
-  // Sessions carry the book's ol_key (not its local numeric id, which is
-  // meaningless on another device) so import can re-link them correctly.
-  const sessions = await db.getAllAsync(
-    `SELECT sessions.logged_at, sessions.from_page, sessions.to_page, books.ol_key as book_ol_key
-     FROM sessions JOIN books ON books.id = sessions.book_id`
-  );
-  const payload = JSON.stringify(
-    {
-      app: 'bookmarked',
-      schemaVersion: 2,
-      exportedAt: new Date().toISOString(),
-      books,
-      sessions,
-    },
-    null,
-    2
-  );
-
-  const fileName = `bookmarked-backup-${new Date().toISOString().slice(0, 10)}.json`;
-
-  await shareFile({
-    content: payload,
-    filename: fileName,
-    mimeType: 'application/json',
-    dialogTitle: 'Export Bookmarked backup',
-  });
+interface BackupWork {
+  uid: string;
+  olKey: string;
+  title: string;
+  author: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// Import field validators: a backup file is user-editable (and SQLite's
-// dynamic typing would happily store a string in a REAL column), so every
-// field is normalized at this trust boundary. A bad status would make a book
-// vanish from every shelf filter; a string rating would corrupt avg math.
-const VALID_STATUSES = new Set(['want', 'reading', 'read']);
-
-function importStatus(v: unknown): string {
-  return typeof v === 'string' && VALID_STATUSES.has(v) ? v : 'want';
+interface BackupLibraryItem {
+  uid: string;
+  workUid: string;
+  title: string;
+  ownership: BookOwnership;
+  editionKey: string | null;
+  isbn: string | null;
+  publisher: string | null;
+  publishDate: string | null;
+  language: string | null;
+  coverUrl: string | null;
+  totalPages: number | null;
+  notes: string | null;
+  addedAt: string;
+  updatedAt: string;
 }
 
-function importNumber(v: unknown): number | null {
-  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
-  return Number.isFinite(n) ? n : null;
+interface BackupReadingEntry {
+  uid: string;
+  libraryItemUid: string;
+  sequence: number;
+  status: BookStatus;
+  currentPage: number;
+  rating: number | null;
+  review: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-function importDate(v: unknown): string | null {
-  return typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : null;
+interface BackupSession {
+  uid: string;
+  readingEntryUid: string;
+  loggedAt: string;
+  fromPage: number;
+  toPage: number;
+  updatedAt: string;
 }
 
-function importString(v: unknown): string | null {
-  return typeof v === 'string' ? v : null;
+interface BackupTombstone {
+  entityType: 'work' | 'library_item' | 'reading_entry' | 'session';
+  uid: string;
+  deletedAt: string;
 }
 
-// Restores a backup produced by exportLibrary. Books are matched by their
-// Open Library key: existing rows are overwritten, new ones inserted.
-// Returns the number of books imported, or throws on an unrecognized file.
-export async function importLibrary(db: SQLiteDatabase): Promise<number | null> {
-  // text/plain included so backups that platforms saved as .txt still import.
-  const picked = await DocumentPicker.getDocumentAsync({
-    type: ['application/json', 'text/plain'],
-    copyToCacheDirectory: true,
-  });
-  if (picked.canceled || picked.assets.length === 0) return null;
-  const asset = picked.assets[0];
+export interface BackupV3 {
+  app: 'bookmarked';
+  schemaVersion: 3;
+  exportedAt: string;
+  works: BackupWork[];
+  libraryItems: BackupLibraryItem[];
+  readingEntries: BackupReadingEntry[];
+  sessions: BackupSession[];
+  tombstones: BackupTombstone[];
+}
 
-  let text: string;
-  if (Platform.OS === 'web') {
-    text = asset.file ? await asset.file.text() : await (await fetch(asset.uri)).text();
-  } else {
-    text = await FileSystem.readAsStringAsync(asset.uri);
+export interface ImportSummary {
+  changed: number;
+  skipped: number;
+}
+
+const VALID_STATUSES = new Set<BookStatus>(['want', 'reading', 'read']);
+const VALID_OWNERSHIP = new Set<BookOwnership>(['owned', 'wishlist', 'borrowed']);
+const VALID_ENTITY_TYPES = new Set<BackupTombstone['entityType']>([
+  'work',
+  'library_item',
+  'reading_entry',
+  'session',
+]);
+
+function asRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
   }
+  return value as Record<string, unknown>;
+}
 
-  const payload = JSON.parse(text) as {
-    app?: string;
-    books?: Record<string, unknown>[];
-    sessions?: Record<string, unknown>[];
+function asArray(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  return value;
+}
+
+function requiredString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  return value;
+}
+
+function nullableString(value: unknown, label: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') throw new Error(`${label} must be a string or null`);
+  return value;
+}
+
+function isoDate(value: unknown, label: string, nullable = false): string | null {
+  if (nullable && (value === null || value === undefined)) return null;
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+    throw new Error(`${label} must be a valid ISO date`);
+  }
+  return new Date(value).toISOString();
+}
+
+function finiteNumber(value: unknown, label: string, nullable = false): number | null {
+  if (nullable && (value === null || value === undefined)) return null;
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(number)) throw new Error(`${label} must be a finite number`);
+  return number;
+}
+
+function nonNegativeInteger(value: unknown, label: string): number {
+  const number = finiteNumber(value, label);
+  if (number === null || number < 0) throw new Error(`${label} must be non-negative`);
+  return Math.round(number);
+}
+
+function positiveIntegerOrNull(value: unknown, label: string): number | null {
+  const number = finiteNumber(value, label, true);
+  if (number === null) return null;
+  if (number <= 0) throw new Error(`${label} must be positive`);
+  return Math.round(number);
+}
+
+function ratingOrNull(value: unknown, label: string): number | null {
+  const rating = finiteNumber(value, label, true);
+  if (rating === null) return null;
+  if (rating < 0.5 || rating > 10) throw new Error(`${label} must be between 0.5 and 10`);
+  return rating;
+}
+
+function unique(values: string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`${label} contains duplicate UIDs`);
+}
+
+function normalizeV3(payload: Record<string, unknown>): BackupV3 {
+  const exportedAt = isoDate(payload.exportedAt, 'exportedAt') as string;
+  const works = asArray(payload.works, 'works').map((value, index): BackupWork => {
+    const row = asRecord(value, `works[${index}]`);
+    return {
+      uid: requiredString(row.uid, `works[${index}].uid`),
+      olKey: requiredString(row.olKey, `works[${index}].olKey`),
+      title: requiredString(row.title, `works[${index}].title`),
+      author: typeof row.author === 'string' ? row.author : '',
+      description: nullableString(row.description, `works[${index}].description`),
+      createdAt: isoDate(row.createdAt, `works[${index}].createdAt`) as string,
+      updatedAt: isoDate(row.updatedAt, `works[${index}].updatedAt`) as string,
+    };
+  });
+  const libraryItems = asArray(payload.libraryItems, 'libraryItems').map(
+    (value, index): BackupLibraryItem => {
+      const row = asRecord(value, `libraryItems[${index}]`);
+      const ownership = requiredString(row.ownership, `libraryItems[${index}].ownership`) as BookOwnership;
+      if (!VALID_OWNERSHIP.has(ownership)) throw new Error(`Invalid ownership at libraryItems[${index}]`);
+      return {
+        uid: requiredString(row.uid, `libraryItems[${index}].uid`),
+        workUid: requiredString(row.workUid, `libraryItems[${index}].workUid`),
+        title: requiredString(row.title, `libraryItems[${index}].title`),
+        ownership,
+        editionKey: nullableString(row.editionKey, `libraryItems[${index}].editionKey`),
+        isbn: nullableString(row.isbn, `libraryItems[${index}].isbn`),
+        publisher: nullableString(row.publisher, `libraryItems[${index}].publisher`),
+        publishDate: nullableString(row.publishDate, `libraryItems[${index}].publishDate`),
+        language: nullableString(row.language, `libraryItems[${index}].language`),
+        coverUrl: nullableString(row.coverUrl, `libraryItems[${index}].coverUrl`),
+        totalPages: positiveIntegerOrNull(row.totalPages, `libraryItems[${index}].totalPages`),
+        notes: nullableString(row.notes, `libraryItems[${index}].notes`),
+        addedAt: isoDate(row.addedAt, `libraryItems[${index}].addedAt`) as string,
+        updatedAt: isoDate(row.updatedAt, `libraryItems[${index}].updatedAt`) as string,
+      };
+    }
+  );
+  const readingEntries = asArray(payload.readingEntries, 'readingEntries').map(
+    (value, index): BackupReadingEntry => {
+      const row = asRecord(value, `readingEntries[${index}]`);
+      const status = requiredString(row.status, `readingEntries[${index}].status`) as BookStatus;
+      if (!VALID_STATUSES.has(status)) throw new Error(`Invalid status at readingEntries[${index}]`);
+      const sequence = nonNegativeInteger(row.sequence, `readingEntries[${index}].sequence`);
+      if (sequence < 1) throw new Error(`readingEntries[${index}].sequence must be positive`);
+      return {
+        uid: requiredString(row.uid, `readingEntries[${index}].uid`),
+        libraryItemUid: requiredString(row.libraryItemUid, `readingEntries[${index}].libraryItemUid`),
+        sequence,
+        status,
+        currentPage: nonNegativeInteger(row.currentPage, `readingEntries[${index}].currentPage`),
+        rating: ratingOrNull(row.rating, `readingEntries[${index}].rating`),
+        review: nullableString(row.review, `readingEntries[${index}].review`),
+        startedAt: isoDate(row.startedAt, `readingEntries[${index}].startedAt`, true),
+        finishedAt: isoDate(row.finishedAt, `readingEntries[${index}].finishedAt`, true),
+        createdAt: isoDate(row.createdAt, `readingEntries[${index}].createdAt`) as string,
+        updatedAt: isoDate(row.updatedAt, `readingEntries[${index}].updatedAt`) as string,
+      };
+    }
+  );
+  readingEntries.sort(
+    (a, b) => a.libraryItemUid.localeCompare(b.libraryItemUid) || a.sequence - b.sequence
+  );
+  const sessions = asArray(payload.sessions, 'sessions').map((value, index): BackupSession => {
+    const row = asRecord(value, `sessions[${index}]`);
+    return {
+      uid: requiredString(row.uid, `sessions[${index}].uid`),
+      readingEntryUid: requiredString(row.readingEntryUid, `sessions[${index}].readingEntryUid`),
+      loggedAt: isoDate(row.loggedAt, `sessions[${index}].loggedAt`) as string,
+      fromPage: nonNegativeInteger(row.fromPage, `sessions[${index}].fromPage`),
+      toPage: nonNegativeInteger(row.toPage, `sessions[${index}].toPage`),
+      updatedAt: isoDate(row.updatedAt, `sessions[${index}].updatedAt`) as string,
+    };
+  });
+  const tombstones = asArray(payload.tombstones, 'tombstones').map(
+    (value, index): BackupTombstone => {
+      const row = asRecord(value, `tombstones[${index}]`);
+      const entityType = requiredString(row.entityType, `tombstones[${index}].entityType`) as BackupTombstone['entityType'];
+      if (!VALID_ENTITY_TYPES.has(entityType)) throw new Error(`Invalid tombstone type at index ${index}`);
+      return {
+        entityType,
+        uid: requiredString(row.uid, `tombstones[${index}].uid`),
+        deletedAt: isoDate(row.deletedAt, `tombstones[${index}].deletedAt`) as string,
+      };
+    }
+  );
+
+  unique(works.map((row) => row.uid), 'works');
+  unique(libraryItems.map((row) => row.uid), 'libraryItems');
+  unique(readingEntries.map((row) => row.uid), 'readingEntries');
+  unique(sessions.map((row) => row.uid), 'sessions');
+  const workUids = new Set(works.map((row) => row.uid));
+  const itemUids = new Set(libraryItems.map((row) => row.uid));
+  const readingUids = new Set(readingEntries.map((row) => row.uid));
+  if (libraryItems.some((row) => !workUids.has(row.workUid))) throw new Error('Backup contains an item without its Work');
+  if (readingEntries.some((row) => !itemUids.has(row.libraryItemUid))) throw new Error('Backup contains a reading without its library item');
+  if (sessions.some((row) => !readingUids.has(row.readingEntryUid))) throw new Error('Backup contains a session without its reading');
+  const activeByItem = new Set<string>();
+  const sequences = new Set<string>();
+  for (const reading of readingEntries) {
+    const sequenceKey = `${reading.libraryItemUid}:${reading.sequence}`;
+    if (sequences.has(sequenceKey)) throw new Error('Backup contains duplicate reading sequences');
+    sequences.add(sequenceKey);
+    if (reading.status === 'reading') {
+      if (activeByItem.has(reading.libraryItemUid)) throw new Error('Backup contains multiple active rereads for one copy');
+      activeByItem.add(reading.libraryItemUid);
+    }
+  }
+  return { app: 'bookmarked', schemaVersion: 3, exportedAt, works, libraryItems, readingEntries, sessions, tombstones };
+}
+
+function legacyString(row: Record<string, unknown>, key: string): string | null {
+  return nullableString(row[key], key);
+}
+
+function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
+  const exportedAt = (isoDate(payload.exportedAt, 'exportedAt', true) ?? new Date().toISOString()) as string;
+  const rawBooks = asArray(payload.books, 'books').map((value, index) => asRecord(value, `books[${index}]`));
+  const works: BackupWork[] = [];
+  const libraryItems: BackupLibraryItem[] = [];
+  const readingEntries: BackupReadingEntry[] = [];
+  const bookKeys = new Set<string>();
+  for (const [index, row] of rawBooks.entries()) {
+    const olKey = requiredString(row.ol_key, `books[${index}].ol_key`);
+    if (bookKeys.has(olKey)) throw new Error('Legacy backup contains duplicate books');
+    bookKeys.add(olKey);
+    const title = requiredString(row.title, `books[${index}].title`);
+    const addedAt = (isoDate(row.added_at, `books[${index}].added_at`, true) ?? exportedAt) as string;
+    const startedAt = isoDate(row.started_at, `books[${index}].started_at`, true);
+    const finishedAt = isoDate(row.finished_at, `books[${index}].finished_at`, true);
+    const updatedAt = (isoDate(row.updated_at, `books[${index}].updated_at`, true) ?? finishedAt ?? startedAt ?? addedAt) as string;
+    const statusCandidate = typeof row.status === 'string' ? row.status as BookStatus : 'want';
+    const status = VALID_STATUSES.has(statusCandidate) ? statusCandidate : 'want';
+    const workUid = `work:${olKey}`;
+    const itemUid = `item:${olKey}:1`;
+    works.push({
+      uid: workUid,
+      olKey,
+      title,
+      author: legacyString(row, 'author') ?? '',
+      description: legacyString(row, 'description'),
+      createdAt: addedAt,
+      updatedAt,
+    });
+    libraryItems.push({
+      uid: itemUid,
+      workUid,
+      title,
+      ownership: status === 'want' ? 'wishlist' : 'owned',
+      editionKey: null,
+      isbn: null,
+      publisher: null,
+      publishDate: null,
+      language: null,
+      coverUrl: legacyString(row, 'cover_url'),
+      totalPages: positiveIntegerOrNull(row.total_pages, `books[${index}].total_pages`),
+      notes: legacyString(row, 'notes'),
+      addedAt,
+      updatedAt,
+    });
+    readingEntries.push({
+      uid: `reading:${olKey}:1`,
+      libraryItemUid: itemUid,
+      sequence: 1,
+      status,
+      currentPage: nonNegativeInteger(row.current_page ?? 0, `books[${index}].current_page`),
+      rating: ratingOrNull(row.rating, `books[${index}].rating`),
+      review: legacyString(row, 'review'),
+      startedAt,
+      finishedAt,
+      createdAt: addedAt,
+      updatedAt,
+    });
+  }
+  const sessions = asArray(payload.sessions ?? [], 'sessions').map((value, index): BackupSession => {
+    const row = asRecord(value, `sessions[${index}]`);
+    const olKey = requiredString(row.book_ol_key, `sessions[${index}].book_ol_key`);
+    if (!bookKeys.has(olKey)) throw new Error(`sessions[${index}] references an unknown book`);
+    const loggedAt = isoDate(row.logged_at, `sessions[${index}].logged_at`) as string;
+    const fromPage = nonNegativeInteger(row.from_page, `sessions[${index}].from_page`);
+    const toPage = nonNegativeInteger(row.to_page, `sessions[${index}].to_page`);
+    return {
+      uid: `session:${olKey}:${loggedAt}:${fromPage}:${toPage}`,
+      readingEntryUid: `reading:${olKey}:1`,
+      loggedAt,
+      fromPage,
+      toPage,
+      updatedAt: loggedAt,
+    };
+  });
+  return { app: 'bookmarked', schemaVersion: 3, exportedAt, works, libraryItems, readingEntries, sessions, tombstones: [] };
+}
+
+export function parseBackupPayload(value: unknown): BackupV3 {
+  const payload = asRecord(value, 'backup');
+  if (payload.app !== 'bookmarked') throw new Error('Not a Bookmarked backup file');
+  return payload.schemaVersion === 3 ? normalizeV3(payload) : normalizeLegacy(payload);
+}
+
+export async function createBackupPayload(db: SQLiteDatabase): Promise<BackupV3> {
+  const works = await db.getAllAsync<BackupWork>(
+    `SELECT uid, ol_key AS olKey, title, author, description,
+            created_at AS createdAt, updated_at AS updatedAt FROM works`
+  );
+  const libraryItems = await db.getAllAsync<BackupLibraryItem>(
+    `SELECT library_items.uid, works.uid AS workUid, library_items.title,
+            library_items.ownership, library_items.edition_key AS editionKey,
+            library_items.isbn, library_items.publisher,
+            library_items.publish_date AS publishDate, library_items.language,
+            library_items.cover_url AS coverUrl,
+            library_items.total_pages AS totalPages, library_items.notes,
+            library_items.added_at AS addedAt, library_items.updated_at AS updatedAt
+     FROM library_items JOIN works ON works.id = library_items.work_id`
+  );
+  const readingEntries = await db.getAllAsync<BackupReadingEntry>(
+    `SELECT reading_entries.uid, library_items.uid AS libraryItemUid,
+            reading_entries.sequence, reading_entries.status,
+            reading_entries.current_page AS currentPage, reading_entries.rating,
+            reading_entries.review, reading_entries.started_at AS startedAt,
+            reading_entries.finished_at AS finishedAt,
+            reading_entries.created_at AS createdAt, reading_entries.updated_at AS updatedAt
+     FROM reading_entries
+     JOIN library_items ON library_items.id = reading_entries.library_item_id`
+  );
+  const sessions = await db.getAllAsync<BackupSession>(
+    `SELECT sessions.uid, reading_entries.uid AS readingEntryUid,
+            sessions.logged_at AS loggedAt, sessions.from_page AS fromPage,
+            sessions.to_page AS toPage, sessions.updated_at AS updatedAt
+     FROM sessions JOIN reading_entries ON reading_entries.id = sessions.reading_entry_id`
+  );
+  const tombstones = await db.getAllAsync<BackupTombstone>(
+    `SELECT entity_type AS entityType, uid, deleted_at AS deletedAt FROM tombstones`
+  );
+  return {
+    app: 'bookmarked',
+    schemaVersion: 3,
+    exportedAt: new Date().toISOString(),
+    works,
+    libraryItems,
+    readingEntries,
+    sessions,
+    tombstones,
   };
-  if (payload.app !== 'bookmarked' || !Array.isArray(payload.books)) {
-    throw new Error('Not a Bookmarked backup file');
+}
+
+async function blockedByTombstone(
+  db: SQLiteDatabase,
+  entityType: BackupTombstone['entityType'],
+  uid: string,
+  updatedAt: string
+): Promise<boolean> {
+  const tombstone = await db.getFirstAsync<{ deleted_at: string }>(
+    'SELECT deleted_at FROM tombstones WHERE entity_type = ? AND uid = ?',
+    entityType,
+    uid
+  );
+  if (!tombstone) return false;
+  if (tombstone.deleted_at >= updatedAt) return true;
+  await db.runAsync('DELETE FROM tombstones WHERE entity_type = ? AND uid = ?', entityType, uid);
+  return false;
+}
+
+async function mergePayload(db: SQLiteDatabase, payload: BackupV3): Promise<ImportSummary> {
+  let changed = 0;
+  let skipped = 0;
+  for (const tombstone of payload.tombstones) {
+    await db.runAsync(
+      `INSERT INTO tombstones (entity_type, uid, deleted_at) VALUES (?, ?, ?)
+       ON CONFLICT(entity_type, uid) DO UPDATE SET deleted_at = excluded.deleted_at
+       WHERE excluded.deleted_at > tombstones.deleted_at`,
+      tombstone.entityType,
+      tombstone.uid,
+      tombstone.deletedAt
+    );
+  }
+  for (const work of payload.works) {
+    if (await blockedByTombstone(db, 'work', work.uid, work.updatedAt)) {
+      skipped += 1;
+      continue;
+    }
+    const result = await db.runAsync(
+      `INSERT INTO works (uid, ol_key, title, author, description, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(uid) DO UPDATE SET
+         ol_key = excluded.ol_key, title = excluded.title, author = excluded.author,
+         description = excluded.description, created_at = excluded.created_at,
+         updated_at = excluded.updated_at
+       WHERE excluded.updated_at > works.updated_at`,
+      work.uid,
+      work.olKey,
+      work.title,
+      work.author,
+      work.description,
+      work.createdAt,
+      work.updatedAt
+    );
+    result.changes > 0 ? changed++ : skipped++;
+  }
+  for (const item of payload.libraryItems) {
+    if (await blockedByTombstone(db, 'library_item', item.uid, item.updatedAt)) {
+      skipped += 1;
+      continue;
+    }
+    const work = await db.getFirstAsync<{ id: number }>('SELECT id FROM works WHERE uid = ?', item.workUid);
+    if (!work) {
+      skipped += 1;
+      continue;
+    }
+    const result = await db.runAsync(
+      `INSERT INTO library_items
+         (uid, work_id, title, ownership, edition_key, isbn, publisher, publish_date,
+          language, cover_url, total_pages, notes, added_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(uid) DO UPDATE SET
+         work_id = excluded.work_id, title = excluded.title,
+         ownership = excluded.ownership, edition_key = excluded.edition_key,
+         isbn = excluded.isbn, publisher = excluded.publisher,
+         publish_date = excluded.publish_date, language = excluded.language,
+         cover_url = excluded.cover_url,
+         total_pages = excluded.total_pages, notes = excluded.notes,
+         added_at = excluded.added_at, updated_at = excluded.updated_at
+       WHERE excluded.updated_at > library_items.updated_at`,
+      item.uid,
+      work.id,
+      item.title,
+      item.ownership,
+      item.editionKey,
+      item.isbn,
+      item.publisher,
+      item.publishDate,
+      item.language,
+      item.coverUrl,
+      item.totalPages,
+      item.notes,
+      item.addedAt,
+      item.updatedAt
+    );
+    result.changes > 0 ? changed++ : skipped++;
+  }
+  for (const reading of payload.readingEntries) {
+    if (await blockedByTombstone(db, 'reading_entry', reading.uid, reading.updatedAt)) {
+      skipped += 1;
+      continue;
+    }
+    const item = await db.getFirstAsync<{ id: number }>('SELECT id FROM library_items WHERE uid = ?', reading.libraryItemUid);
+    if (!item) {
+      skipped += 1;
+      continue;
+    }
+    const result = await db.runAsync(
+      `INSERT INTO reading_entries
+         (uid, library_item_id, sequence, status, current_page, rating, review,
+          started_at, finished_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(uid) DO UPDATE SET
+         library_item_id = excluded.library_item_id, sequence = excluded.sequence,
+         status = excluded.status, current_page = excluded.current_page,
+         rating = excluded.rating, review = excluded.review,
+         started_at = excluded.started_at, finished_at = excluded.finished_at,
+         created_at = excluded.created_at, updated_at = excluded.updated_at
+       WHERE excluded.updated_at > reading_entries.updated_at`,
+      reading.uid,
+      item.id,
+      reading.sequence,
+      reading.status,
+      reading.currentPage,
+      reading.rating,
+      reading.review,
+      reading.startedAt,
+      reading.finishedAt,
+      reading.createdAt,
+      reading.updatedAt
+    );
+    result.changes > 0 ? changed++ : skipped++;
+  }
+  for (const session of payload.sessions) {
+    if (await blockedByTombstone(db, 'session', session.uid, session.updatedAt)) {
+      skipped += 1;
+      continue;
+    }
+    const reading = await db.getFirstAsync<{ id: number }>('SELECT id FROM reading_entries WHERE uid = ?', session.readingEntryUid);
+    if (!reading) {
+      skipped += 1;
+      continue;
+    }
+    const result = await db.runAsync(
+      `INSERT INTO sessions
+         (uid, reading_entry_id, logged_at, from_page, to_page, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(uid) DO UPDATE SET
+         reading_entry_id = excluded.reading_entry_id, logged_at = excluded.logged_at,
+         from_page = excluded.from_page, to_page = excluded.to_page,
+         updated_at = excluded.updated_at
+       WHERE excluded.updated_at > sessions.updated_at`,
+      session.uid,
+      reading.id,
+      session.loggedAt,
+      session.fromPage,
+      session.toPage,
+      session.updatedAt
+    );
+    result.changes > 0 ? changed++ : skipped++;
   }
 
-  let count = 0;
-  // One transaction for the whole restore: an interrupted import must not
-  // leave a partial library behind (and per-row autocommit is slow anyway).
+  await db.execAsync(`
+    DELETE FROM tombstones WHERE entity_type = 'work' AND EXISTS (
+      SELECT 1 FROM works
+      WHERE works.uid = tombstones.uid AND works.updated_at > tombstones.deleted_at
+    );
+    DELETE FROM tombstones WHERE entity_type = 'library_item' AND EXISTS (
+      SELECT 1 FROM library_items
+      WHERE library_items.uid = tombstones.uid
+        AND library_items.updated_at > tombstones.deleted_at
+    );
+    DELETE FROM tombstones WHERE entity_type = 'reading_entry' AND EXISTS (
+      SELECT 1 FROM reading_entries
+      WHERE reading_entries.uid = tombstones.uid
+        AND reading_entries.updated_at > tombstones.deleted_at
+    );
+    DELETE FROM tombstones WHERE entity_type = 'session' AND EXISTS (
+      SELECT 1 FROM sessions
+      WHERE sessions.uid = tombstones.uid AND sessions.updated_at > tombstones.deleted_at
+    );
+    DELETE FROM sessions WHERE EXISTS (
+      SELECT 1 FROM tombstones
+      WHERE entity_type = 'session' AND tombstones.uid = sessions.uid
+        AND tombstones.deleted_at >= sessions.updated_at
+    );
+    DELETE FROM reading_entries WHERE EXISTS (
+      SELECT 1 FROM tombstones
+      WHERE entity_type = 'reading_entry' AND tombstones.uid = reading_entries.uid
+        AND tombstones.deleted_at >= reading_entries.updated_at
+    );
+    DELETE FROM library_items WHERE EXISTS (
+      SELECT 1 FROM tombstones
+      WHERE entity_type = 'library_item' AND tombstones.uid = library_items.uid
+        AND tombstones.deleted_at >= library_items.updated_at
+    );
+    DELETE FROM works WHERE EXISTS (
+      SELECT 1 FROM tombstones
+      WHERE entity_type = 'work' AND tombstones.uid = works.uid
+        AND tombstones.deleted_at >= works.updated_at
+    );
+  `);
+  const foreignKeyFailure = await db.getFirstAsync<Record<string, unknown>>('PRAGMA foreign_key_check');
+  if (foreignKeyFailure) throw new Error('Backup import created an orphaned row');
+  return { changed, skipped };
+}
+
+export async function importBackupPayload(db: SQLiteDatabase, value: unknown): Promise<ImportSummary> {
+  // Parse and validate the complete payload before opening the transaction.
+  const payload = parseBackupPayload(value);
+  let summary: ImportSummary = { changed: 0, skipped: 0 };
   await db.withTransactionAsync(async () => {
-    for (const b of payload.books!) {
-      if (typeof b.ol_key !== 'string' || typeof b.title !== 'string') continue;
-      const totalPagesRaw = importNumber(b.total_pages);
-      const totalPages =
-        totalPagesRaw !== null && totalPagesRaw > 0 ? Math.round(totalPagesRaw) : null;
-      const currentPage = Math.max(0, Math.round(importNumber(b.current_page) ?? 0));
-      const ratingRaw = importNumber(b.rating);
-      const rating = ratingRaw !== null && ratingRaw >= 0.5 && ratingRaw <= 10 ? ratingRaw : null;
-      await db.runAsync(
-        `INSERT INTO books
-           (ol_key, title, author, cover_url, total_pages, status, current_page,
-            rating, review, notes, added_at, started_at, finished_at, description, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(ol_key) DO UPDATE SET
-           title = excluded.title, author = excluded.author,
-           cover_url = excluded.cover_url, total_pages = excluded.total_pages,
-           status = excluded.status, current_page = excluded.current_page,
-           rating = excluded.rating, review = excluded.review, notes = excluded.notes,
-           added_at = excluded.added_at, started_at = excluded.started_at,
-           finished_at = excluded.finished_at, description = excluded.description,
-           updated_at = excluded.updated_at`,
-        b.ol_key,
-        b.title,
-        importString(b.author) ?? '',
-        importString(b.cover_url),
-        totalPages,
-        importStatus(b.status),
-        currentPage,
-        rating,
-        importString(b.review),
-        importString(b.notes),
-        importDate(b.added_at) ?? new Date().toISOString(),
-        importDate(b.started_at),
-        importDate(b.finished_at),
-        importString(b.description),
-        importDate(b.updated_at)
-      );
-      count += 1;
-    }
-
-    // Sessions reference books by ol_key in the backup (schemaVersion 1
-    // backups predate sessions entirely — payload.sessions is simply absent).
-    if (Array.isArray(payload.sessions)) {
-      for (const s of payload.sessions) {
-        const fromPage = importNumber(s.from_page);
-        const toPage = importNumber(s.to_page);
-        if (
-          typeof s.book_ol_key !== 'string' ||
-          importDate(s.logged_at) === null ||
-          fromPage === null ||
-          fromPage < 0 ||
-          toPage === null ||
-          toPage < 0
-        ) {
-          continue;
-        }
-        const row = await db.getFirstAsync<{ id: number }>(
-          'SELECT id FROM books WHERE ol_key = ?',
-          s.book_ol_key
-        );
-        if (!row) continue;
-        await db.runAsync(
-          `INSERT OR IGNORE INTO sessions (book_id, logged_at, from_page, to_page) VALUES (?, ?, ?, ?)`,
-          row.id,
-          s.logged_at as string,
-          Math.round(fromPage),
-          Math.round(toPage)
-        );
-      }
-    }
+    summary = await mergePayload(db, payload);
   });
-
-  return count;
+  return summary;
 }

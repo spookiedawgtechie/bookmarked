@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { notify } from '../../lib/alert';
-import { getAllBooks, getAllSessions } from '../../lib/db';
+import { getAllReadingHistory, getAllSessions } from '../../lib/db';
 import { formatDateShort, plural } from '../../lib/format';
 import { shareFile } from '../../lib/share';
 import { dailyPagesInYear, dateKey, pagesByMonth, pagesInYear } from '../../lib/stats';
@@ -96,7 +96,7 @@ export default function Recap() {
   const heatmapScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    getAllBooks(db).then((all) =>
+    getAllReadingHistory(db).then((all) =>
       setBooks(
         all
           .filter(
@@ -374,7 +374,7 @@ export default function Recap() {
             <Text style={styles.subheading}>Everything you finished</Text>
             {books.map((b) => (
               <Link
-                key={b.id}
+                key={b.readingId}
                 href={{ pathname: '/book/[id]', params: { id: String(b.id) } }}
                 asChild
               >

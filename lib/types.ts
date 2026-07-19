@@ -1,10 +1,19 @@
 export type BookStatus = 'want' | 'reading' | 'read';
+export type BookOwnership = 'owned' | 'wishlist' | 'borrowed';
 
 export interface Book {
   id: number;
+  readingId: number;
+  readingSequence: number;
   olKey: string;
   title: string;
   author: string;
+  ownership: BookOwnership;
+  editionKey: string | null;
+  isbn: string | null;
+  publisher: string | null;
+  publishDate: string | null;
+  language: string | null;
   coverUrl: string | null;
   totalPages: number | null;
   // null = never fetched, '' = fetched but Open Library has none
@@ -22,6 +31,7 @@ export interface Book {
 
 export interface ReadingSession {
   id: number;
+  readingId: number;
   bookId: number;
   loggedAt: string; // ISO timestamp
   fromPage: number;

@@ -38,6 +38,10 @@ class TransactionalFakeDb {
     };
   }
 
+  async getFirstAsync<T>(): Promise<T | null> {
+    return { id: 77 } as T;
+  }
+
   asDatabase(): SQLiteDatabase {
     return this as unknown as SQLiteDatabase;
   }
@@ -50,7 +54,7 @@ test('progress, session history, and automatic completion commit together', asyn
   assert.equal(completed, true);
   assert.equal(fake.committed.length, 3);
   assert.match(fake.committed[0].sql, /INSERT OR IGNORE INTO sessions/);
-  assert.match(fake.committed[1].sql, /UPDATE books SET current_page/);
+  assert.match(fake.committed[1].sql, /UPDATE reading_entries SET current_page/);
   assert.match(fake.committed[2].sql, /status = 'read'/);
 });
 
@@ -78,6 +82,6 @@ test('directly marking an old book read does not invent a session dated today', 
   await setStatus(fake.asDatabase(), 9, 'read');
 
   assert.equal(fake.committed.length, 1);
-  assert.match(fake.committed[0].sql, /UPDATE books SET status/);
+  assert.match(fake.committed[0].sql, /UPDATE reading_entries SET status/);
   assert.equal(fake.committed[0].sql.includes('sessions'), false);
 });

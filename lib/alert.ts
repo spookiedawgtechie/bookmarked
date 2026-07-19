@@ -13,14 +13,15 @@ export function confirmDialog(
   title: string,
   message: string,
   confirmLabel: string,
-  onConfirm: () => void
+  onConfirm: () => void,
+  destructive = true
 ): void {
   if (Platform.OS === 'web') {
     if (window.confirm(`${title}\n\n${message}`)) onConfirm();
   } else {
     Alert.alert(title, message, [
       { text: 'Cancel', style: 'cancel' },
-      { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+      { text: confirmLabel, style: destructive ? 'destructive' : 'default', onPress: onConfirm },
     ]);
   }
 }

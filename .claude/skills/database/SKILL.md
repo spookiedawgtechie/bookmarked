@@ -1,68 +1,88 @@
 ---
 name: database
-description: Bookmarked's SQLite schema, data-layer conventions, and how to add columns or queries safely. Use when changing lib/db.ts, adding features that store data, or debugging wrong stats/status behavior.
+description: Bookmarked's versioned SQLite v3 schema, migration, rereads, ownership, sessions, and backup merge invariants. Use for every persisted-data change or wrong stats/status/import issue.
 ---
 
 # Database
 
-Single SQLite database `bookmarked.db`, opened by `SQLiteProvider` in `app/_layout.tsx`, which runs `migrate()` from `lib/db.ts` on every launch. **All SQL lives in `lib/db.ts`** — screens call named functions and never touch SQL or `fetch` directly. Keep it that way.
+`SQLiteProvider` opens `bookmarked.db` in `app/_layout.tsx` and calls `migrate()` from `lib/db.ts`. The app is local-first: there is no server database, account, or sync layer. Screens call named functions; normal app SQL belongs in `lib/db.ts`, while portable backup SQL/validation belongs in `lib/backup.ts`.
 
-## books table
+## Versioning and migration
 
-| column | type | meaning |
-|---|---|---|
-| id | INTEGER PK AUTOINCREMENT | internal id, used in routes `/book/[id]` |
-| ol_key | TEXT UNIQUE | Open Library work key, e.g. `/works/OL45883W`; the dedupe + import-merge identity |
-| title, author | TEXT | copied from search at add-time |
-| cover_url | TEXT nullable | full URL; user can replace via cover picker |
-| total_pages | INTEGER nullable | null = unknown; UI asks the user to type it |
-| status | TEXT | `'want' | 'reading' | 'read'` — vocabulary enforced by the TS type `BookStatus`, not the DB |
-| current_page | INTEGER default 0 | |
-| rating | REAL nullable | 0.5–10 in half steps (10-point scale is a product decision) |
-| review | TEXT nullable | |
-| added_at | TEXT | ISO-8601 string (SQLite has no date type; ISO strings sort correctly) |
-| started_at | TEXT nullable | write-once (see lifecycle) |
-| finished_at | TEXT nullable | **drives all stats/recaps** (grouped by year/quarter) |
-| description | TEXT nullable | `null` = never fetched from Open Library; `''` = fetched, none exists (sentinel prevents refetch loops) |
-| updated_at | TEXT nullable | stamped by logProgress/setStatus; sorts Currently Reading |
+- Current `PRAGMA user_version` is **3** (`DATABASE_VERSION`). Never return to ad hoc ALTER-only migrations.
+- A v1/v2 install has `books` plus page-delta `sessions`. Migration first completes the old additive columns/backfill, then performs all renames, v3 table creation, copies, integrity counts, `foreign_key_check`, and `user_version` update in **one transaction**.
+- Old tables remain as `legacy_books_v1` and `legacy_sessions_v2`, an emergency read-only snapshot. They are not queried by the running app.
+- Migrated identities are deterministic across APK/PWA: `work:<ol_key>`, `item:<ol_key>:1`, `reading:<ol_key>:1`, and a session UID derived from work/date/pages. Random IDs here would duplicate the same migrated copy during cross-device import.
+- Migration must preserve Work count = item count = reading count and old/new session count. Any mismatch throws and rolls the whole transaction back; tests use real in-memory SQLite and deliberately inject a mid-migration failure.
+- Do not raise `DATABASE_VERSION` without a new explicit version step and upgrade fixture. A newer unknown database version must fail closed.
 
-## sessions table
+## v3 ownership model
 
-One row per progress edit (page delta). `id, book_id, logged_at TEXT, from_page INTEGER, to_page INTEGER`, `UNIQUE(book_id, logged_at, from_page, to_page)` to make repeated writes/imports idempotent. **This is the only source of truth for "how many pages did I read and when"** — `books.current_page` is just the current position, not history.
+```
+Work (literary identity)
+  └── Library item (physical edition/copy)
+        └── Reading entry #1, #2, ... (rereads)
+              └── Sessions (page deltas)
+```
 
-- **`logProgress(db, id, fromPage, toPage)`** in `lib/db.ts` is the single write path for progress — inside one cross-platform SQLite transaction it inserts a session row (skipped if `fromPage === toPage`), updates `books.current_page`/`updated_at`, and auto-completes the book when the logged page reaches `total_pages`. It returns whether that write transitioned the book to `read`. **There is no `setProgress` anymore** — screens must never write `current_page` directly, or session history silently stops matching reality. Both call sites (`app/(tabs)/index.tsx` log-progress modal, `app/book/[id].tsx` slider) pass the last-known persisted page as `fromPage` — the detail screen keeps this in a `persistedPageRef` (not `book.currentPage`) so multiple debounced writes in one visit each produce an accurate delta, not one big delta from stale state.
-- **One-time backfill in `migrate()`**: for any book with `current_page > 0` and zero existing sessions, inserts a single historical session `0 → current_page` dated `finished_at ?? started_at ?? added_at`. Runs every launch but is a no-op once a book has any real session (idempotent via the `id NOT IN (SELECT book_id FROM sessions)` guard) — this is what keeps pre-sessions libraries from losing stats history.
-- `deleteBook` deletes the book's sessions first (no FK/cascade is declared — deliberately explicit for portability across the native/wasm SQLite builds).
-- Backup: `exportLibrary` joins sessions to `books.ol_key` (not the local numeric id, which is meaningless on another device) so `importLibrary` can re-link them to the right local book by key. Old (schemaVersion 1) backups simply have no `sessions` field — import treats that as zero sessions, not an error.
-- Pure computation over fetched sessions (`pagesInYear`, `pagesInLastDays`, `currentStreakDays`) lives in **`lib/stats.ts`**, not `lib/db.ts` — same "raw access vs. derived computation" split as screens doing their own `.filter`/`.reduce` over `getAllBooks()` results.
+### works
 
-## Lifecycle invariants (encoded in `setStatus`)
+Portable `uid`, unique Open Library Work `ol_key`, canonical title/author/description, created/updated timestamps. Description's sentinel remains: `null` = never fetched; `''` = fetched and none exists.
 
-- → `reading`: `started_at = COALESCE(started_at, now)` — start date is written once, never clobbered by status toggling. Clears `finished_at`.
-- → `read`: same COALESCE for `started_at` (covers marking read directly), stamps `finished_at = now`, snaps `current_page = COALESCE(total_pages, current_page)`.
-- → `want`: clears `finished_at` (a wishlisted book is by definition not finished — keeps stats honest).
-- `logProgress`/`setStatus` also stamp `updated_at = now`.
-- Backdating: the detail screen writes user-entered `YYYY-MM-DD` as `<date>T12:00:00.000Z` via `setFinishedDate` (noon UTC avoids timezone date-shifts).
-- Logging the last page auto-marks the book `read` inside `logProgress`'s transaction, so the session, current page, and lifecycle cannot partially commit. Directly choosing `read` in the status UI deliberately does not invent a session: an old book may be backdated afterward, and crediting every page to today would corrupt yearly stats.
+### library_items
 
-## Stats math (what the numbers mean)
+One physical copy/edition: portable `uid`, Work FK, editable display title, ownership (`owned | wishlist | borrowed`), Open Library edition key, ISBN, publisher, publication date, language, cover, total pages, private copy notes, added/updated timestamps. Physical-only is intentional—do not add audiobook/format fields unless the owner reverses that product decision.
 
-- **"Pages read" (Stats tab, home year-strip, recaps) = `pagesInYear(sessions, year)`** from `lib/stats.ts` — the sum of `max(0, to_page - from_page)` over every session logged in that calendar year, regardless of whether the book has been finished yet. This was previously `SUM(total_pages)` over finished books only (a real gap: in-progress reading counted for nothing); fixed once sessions shipped. Every screen showing "pages" must use this function, not a books-table sum, or the numbers will disagree with each other.
-- "Books finished" / quarterly-by-book-count charts still group by `finished_at` — that's a different, valid metric (how many books, not how many pages) and wasn't part of the gap; not changed.
-- Average rating averages all non-null ratings across all books, not scoped to the year (matches existing behavior, not part of this fix).
-- Streak (`currentStreakDays`) and weekly pace (`pagesInLastDays(sessions, 7)`) shown on the Shelf header are also sessions-derived; a streak counts distinct calendar days with ≥1 session, and stays "alive" through today even if nothing's logged yet today (only breaks once a full day is skipped).
+Legacy mapping: `want → wishlist`; `reading/read → owned`. The detail screen lets the owner correct this after migration.
 
-## How to add a column
+### reading_entries
 
-1. Add it to the `CREATE TABLE` statement in `migrate()` (for fresh installs), **and** add an `ALTER TABLE books ADD COLUMN ...` line to the try/catch loop below it (for existing databases — the ALTER throws harmlessly once the column exists). Both places, always.
-2. Add the field to the `Book` interface in `lib/types.ts` and to `rowToBook()` (snake_case → camelCase, `?? null` for nullables).
-3. If the column should survive backup/restore, add it to both the INSERT column list and the `ON CONFLICT(ol_key) DO UPDATE SET` list in `importLibrary()` (`lib/backup.ts`). `exportLibrary` needs **no** change — it does `SELECT * FROM books`, so new columns export automatically; only import's explicit lists need updating.
-4. Write a small single-purpose setter (`setX(db, id, value)`) — do not build a generic `updateBook(fields)`.
+One attempt/reread: portable `uid`, item FK, positive sequence, status, current page, rating, review, start/finish/create/update timestamps. `(library_item_id, sequence)` is unique; a partial unique index permits only one `reading` entry per copy.
 
-## Conventions
+`startReread()` only accepts a finished latest entry and atomically creates the next deterministic `reading:<item-uid>:<sequence>` entry at page 0. The previous rating/review/dates remain visible in detail history and count independently in recaps.
 
-- Always parameterized queries (`?` placeholders) — never string-concatenate SQL.
-- `addBook` uses `INSERT OR IGNORE` — the UNIQUE constraint on `ol_key` makes double-adding a silent no-op; the UI shows ✓ based on a separate owned-keys query.
-- Import merges with `INSERT ... ON CONFLICT(ol_key) DO UPDATE SET ...` — existing rows overwritten, new inserted, never duplicated. **The overwrite is unconditional — there is no timestamp/last-write-wins comparison.** Importing an *older* backup over newer on-device data silently reverts those books to the backup's state. This is accepted behavior for now; if a user reports "wrong data after import", check backup age first.
-- No caching layer anywhere: screens re-query on focus via `useFocusEffect` (see `ui-conventions`). At personal-library scale a query costs ~1ms; do not add state management.
-- `PRAGMA journal_mode = WAL` is set in migrate; leave it.
+### sessions
+
+Immutable page-delta history: portable `uid`, reading-entry FK, logged/update timestamp, from/to page. Positive deltas power pages, pace, heatmaps, and streaks. `books.current_page` no longer exists; the latest reading entry stores current position.
+
+### tombstones and app_settings
+
+Deleting a physical copy writes a `library_item` tombstone and cascades its readings/sessions. Tombstones travel in backup v3 so importing an older backup cannot resurrect deleted data. `app_settings` reserves versioned local settings.
+
+## Compatibility query rules
+
+- `getAllBooks()` / `getBook()` return one `Book` per physical item using its latest reading entry—use for Shelf, search ownership, and list/current detail UI.
+- `getAllReadingHistory()` returns every attempt—use for stats and recaps so rereads count independently.
+- `latestCompletedByBook()` collapses history back to one completed row per physical copy for the Read shelf while a newer reread may be active.
+- `getAllSessions()` spans every reading entry and maps back to the physical `bookId` for existing stats helpers.
+- `Book.id` remains the local library-item route id. `Book.readingId` and `readingSequence` identify a particular attempt; never use numeric IDs in backups.
+
+## Write invariants
+
+- `logProgress()` is the only page-write path. One transaction inserts the session, updates current page, and marks the entry read at the last page. It returns whether completion occurred.
+- Direct `setStatus(..., 'read')` does not fabricate a session: old books may be backdated, and crediting all pages to today corrupts yearly stats.
+- Rating/review/status/progress/finish date update `reading_entries.updated_at`.
+- Title/edition/copy metadata/ownership/cover/pages/notes update `library_items.updated_at`.
+- Description updates `works.updated_at`. Complete timestamps are required for backup keep-newer semantics.
+- `addBook()` is transactional. Search has an immediate ref-backed repeated-tap guard; it intentionally prevents a second item for the same Work until a dedicated multi-copy/edition picker is added.
+- Always parameterize values. Never interpolate user/API/backup data into SQL.
+
+## Stats semantics
+
+- Pages = sum of `max(0, to_page - from_page)` from sessions in the selected year.
+- Finished counts/quarters/ratings/duration = completed reading entries; rereads count separately.
+- Shelf/library grids = physical items, not reading entries; no duplicate cover for a reread.
+- Streak/weekly pace/month/heatmap = session dates.
+- Library total = tracked physical items (including wishlist/borrowed under the current label).
+
+## Backup v3
+
+- `lib/backup.ts` is platform-free validation/export/merge logic; `lib/backup-file.ts` owns DocumentPicker/FileSystem/share behavior.
+- Export includes Works, items, readings, sessions, and tombstones with portable UIDs—never local numeric IDs.
+- `parseBackupPayload()` validates the complete graph before a write and accepts old schema 1/2 backups by normalizing them to deterministic v3 records.
+- Import is one transaction and has one mode: **merge and keep newer**. ISO dates are canonicalized before lexicographic comparison. Older/equal records are skipped; newer records replace that entity; newer tombstones beat older entities.
+- There is deliberately no destructive replace mode. `.txt` and `.json` files are both accepted.
+
+## Test requirements
+
+Every schema/backup change must extend `tests/migration.test.ts` or `tests/backup.test.ts`. Required coverage includes success, idempotent rerun, injected rollback, legacy normalization, round-trip relationships, older-local conflict, tombstone non-resurrection, malformed graph prevalidation, import rollback, and reread preservation.

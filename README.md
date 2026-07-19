@@ -13,9 +13,11 @@ A personal, local-first book tracker — a Letterboxd for books. Search Open Lib
 - **Ratings, reviews & notes** — a 10-point scale with half-point steps, a review, and separate private notes for quotes and reminders
 - **Yearly recaps** — books finished, pages read, top rated, fastest read, longest read, a month-by-month pages chart, and a GitHub-style reading heatmap — plus a one-tap shareable recap image
 - **Alternate covers** — pick the edition cover that matches your physical copy
+- **Physical-copy ownership & editions** — track owned, wishlisted, or borrowed copies with edition key, ISBN, publisher, publication date, and language when Open Library provides them
+- **Rereads** — start a fresh reading at page zero without losing previous ratings, reviews, dates, or recap history
 - **Backdating** — log books you read years ago with a real finish date, so your history stays honest
-- **Backup & restore** — full library export/import as JSON, portable between devices
-- **Library metrics** — yearly activity, all-time read count, current-reading count, and total books owned in the local library
+- **Backup & restore** — validated backup v3 JSON with portable IDs, transactional import, keep-newer conflict handling, deletion tombstones, and legacy-backup compatibility
+- **Library metrics** — yearly activity, all-time reading count, current-reading count, and total tracked physical copies
 - **Accessible controls** — named cover actions, screen-reader-adjustable sliders, chart summaries, and cross-platform tab icons
 - **Dark, dense, AMOLED-black UI** — built for one thing: tracking books, not chasing engagement
 

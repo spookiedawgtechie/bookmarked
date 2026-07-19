@@ -19,22 +19,25 @@ import {
 import {
   deleteBook,
   getBook,
+  getReadingHistoryForBook,
   logProgress,
   setCoverUrl,
   setDescription,
   setFinishedDate,
   setNotes,
+  setOwnership,
   setRating,
   setReview,
   setStatus,
   setTitle,
   setTotalPages,
+  startReread,
 } from '../../lib/db';
 import { confirmDialog, notify } from '../../lib/alert';
 import { formatDate } from '../../lib/format';
 import { coverUrl, fetchCoverIds, fetchDescription, sanitizeDescription } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
-import type { Book, BookStatus } from '../../lib/types';
+import type { Book, BookOwnership, BookStatus } from '../../lib/types';
 
 const STATUSES: { value: BookStatus; label: string; accent: string }[] = [
   { value: 'want', label: 'Want to Read', accent: colors.blue },
@@ -42,11 +45,18 @@ const STATUSES: { value: BookStatus; label: string; accent: string }[] = [
   { value: 'read', label: 'Read', accent: colors.orange },
 ];
 
+const OWNERSHIP: { value: BookOwnership; label: string }[] = [
+  { value: 'owned', label: 'Owned' },
+  { value: 'wishlist', label: 'Wishlist' },
+  { value: 'borrowed', label: 'Borrowed' },
+];
+
 export default function BookDetail() {
   const db = useSQLiteContext();
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
   const [book, setBook] = useState<Book | null>(null);
+  const [readingHistory, setReadingHistory] = useState<Book[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [pagesInput, setPagesInput] = useState('');
   const [reviewDraft, setReviewDraft] = useState('');
@@ -77,8 +87,12 @@ export default function BookDetail() {
   const mountedRef = useRef(true);
 
   const reload = useCallback(async () => {
-    const b = await getBook(db, bookId);
+    const [b, history] = await Promise.all([
+      getBook(db, bookId),
+      getReadingHistoryForBook(db, bookId),
+    ]);
     setBook(b);
+    setReadingHistory(history);
     setNotFound(b === null);
     if (b) {
       setPage(b.currentPage);
@@ -163,6 +177,32 @@ export default function BookDetail() {
     } catch {
       notify('Save failed', 'Could not update the status. Try again.');
     }
+  }
+
+  async function onOwnership(ownership: BookOwnership) {
+    try {
+      await setOwnership(db, bookId, ownership);
+      reload();
+    } catch {
+      notify('Save failed', 'Could not update the copy ownership. Try again.');
+    }
+  }
+
+  function onStartReread() {
+    confirmDialog(
+      'Start reread',
+      'Your previous rating, review, and dates will remain in reading history. The new reading starts at page 0.',
+      'Start reread',
+      async () => {
+        try {
+          await startReread(db, bookId);
+          await reload();
+        } catch {
+          notify('Could not start reread', 'Make sure this reading is marked finished, then try again.');
+        }
+      },
+      false
+    );
   }
 
   async function onSavePages() {
@@ -386,6 +426,42 @@ export default function BookDetail() {
               {book.author}
             </Text>
             {book.totalPages && <Text style={styles.meta}>{book.totalPages} pages</Text>}
+            {(book.publisher || book.publishDate) && (
+              <Text style={styles.meta} numberOfLines={2}>
+                {[book.publisher, book.publishDate].filter(Boolean).join(' · ')}
+              </Text>
+            )}
+            {book.isbn && <Text style={styles.meta}>ISBN {book.isbn}</Text>}
+            {book.readingSequence > 1 && (
+              <Text style={styles.meta}>Reading #{book.readingSequence}</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>Physical copy</Text>
+          <View
+            style={styles.statusRow}
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Physical copy ownership"
+          >
+            {OWNERSHIP.map((option) => {
+              const active = book.ownership === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  style={[styles.statusBtn, active && { backgroundColor: colors.blue }]}
+                  onPress={() => onOwnership(option.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={option.label}
+                >
+                  <Text style={[styles.statusBtnText, active && { color: colors.onAccent }]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -555,6 +631,34 @@ export default function BookDetail() {
                 <Text style={styles.saveBtnText}>Save</Text>
               </Pressable>
             </View>
+            <Pressable
+              style={[styles.saveBtn, { marginTop: 14 }]}
+              onPress={onStartReread}
+              accessibilityRole="button"
+              accessibilityLabel={`Start a new reading of ${book.title}`}
+            >
+              <Text style={styles.saveBtnText}>Start reread</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {readingHistory.length > 1 && (
+          <View style={styles.block}>
+            <Text style={styles.blockLabel}>Reading history</Text>
+            {readingHistory
+              .filter((reading) => reading.readingId !== book.readingId)
+              .map((reading) => (
+                <View key={reading.readingId} style={styles.historyRow}>
+                  <Text style={styles.historyTitle}>Reading #{reading.readingSequence}</Text>
+                  <Text style={styles.historyMeta}>
+                    {reading.finishedAt ? `Finished ${formatDate(reading.finishedAt)}` : reading.status}
+                    {reading.rating !== null ? ` · ★ ${reading.rating}/10` : ''}
+                  </Text>
+                  {(reading.review ?? '') !== '' && (
+                    <Text style={styles.historyReview}>{reading.review}</Text>
+                  )}
+                </View>
+              ))}
           </View>
         )}
 
@@ -771,6 +875,15 @@ const styles = StyleSheet.create({
   hint: { color: colors.textDim, fontSize: 13, marginBottom: 10 },
   descText: { color: colors.text, fontSize: 14, lineHeight: 21 },
   progressText: { color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 4 },
+  historyRow: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    marginTop: 8,
+  },
+  historyTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  historyMeta: { color: colors.textDim, fontSize: 12, marginTop: 3 },
+  historyReview: { color: colors.text, fontSize: 13, lineHeight: 19, marginTop: 6 },
   input: {
     backgroundColor: colors.bg,
     borderRadius: 8,

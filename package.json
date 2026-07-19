@@ -34,7 +34,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "tsx --test tests/stats.test.ts tests/openlibrary.test.ts tests/db.test.ts",
+    "test": "tsx --test tests/stats.test.ts tests/openlibrary.test.ts tests/db.test.ts tests/migration.test.ts tests/backup.test.ts tests/readings.test.ts",
     "typecheck": "tsc --noEmit",
     "export:android": "expo export --platform android",
     "export:web": "expo export --platform web",

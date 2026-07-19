@@ -36,7 +36,8 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 
 - Phase 1 is implemented: lightweight regression tests cover stats, Open Library edition mapping, and database transaction behavior; GitHub Actions runs tests, strict typecheck, and Android/web production exports on Node 22.
 - `logProgress` now commits its session delta, current-page update, and automatic read transition in one cross-platform transaction. Direct status changes do not fabricate a session because historical books may be backdated.
-- Still pending owner/device verification before schema work: final-page auto-completion through both Shelf and detail flows. Do not start the versioned `works` / `library_items` / `reading_entries` migration until this foundation is accepted.
+- Owner verified final-page completion through both Shelf and detail flows. The v3 schema migration is implemented in code: versioned transactional Work → physical item → reading/reread → session storage, ownership states, edition metadata, historical recap queries, backup v3 merge/keep-newer with tombstones, and rollback fixtures.
+- Still pending owner verification in Expo Go/PWA with a copied real backup before any APK build. Multi-copy creation/edition replacement UI is not yet exposed; the schema already supports it. Do not deploy or build until explicitly requested.
 
 ## Explicitly rejected
 

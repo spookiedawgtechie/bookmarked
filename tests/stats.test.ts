@@ -10,7 +10,7 @@ import {
 import type { ReadingSession } from '../lib/types';
 
 function session(id: number, date: Date, fromPage: number, toPage: number): ReadingSession {
-  return { id, bookId: 1, loggedAt: date.toISOString(), fromPage, toPage };
+  return { id, readingId: 1, bookId: 1, loggedAt: date.toISOString(), fromPage, toPage };
 }
 
 test('year and month totals count positive page deltas only', () => {

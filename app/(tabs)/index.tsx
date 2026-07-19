@@ -13,7 +13,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { notify } from '../../lib/alert';
-import { getAllBooks, getAllSessions, logProgress } from '../../lib/db';
+import { getAllBooks, getAllReadingHistory, getAllSessions, logProgress } from '../../lib/db';
+import { latestCompletedByBook } from '../../lib/readings';
 import { currentStreakDays, pagesInLastDays, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
@@ -149,6 +150,7 @@ function RowHeader({ label, accent, href }: { label: string; accent: string; hre
 export default function Shelf() {
   const db = useSQLiteContext();
   const [books, setBooks] = useState<Book[]>([]);
+  const [readingHistory, setReadingHistory] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [logBook, setLogBook] = useState<Book | null>(null);
   const [logPage, setLogPage] = useState(0);
@@ -158,6 +160,7 @@ export default function Shelf() {
 
   const refresh = useCallback(() => {
     getAllBooks(db).then(setBooks);
+    getAllReadingHistory(db).then(setReadingHistory);
     getAllSessions(db).then(setSessions);
   }, [db]);
 
@@ -169,12 +172,12 @@ export default function Shelf() {
       (b.updatedAt ?? b.startedAt ?? '').localeCompare(a.updatedAt ?? a.startedAt ?? '')
     );
   const want = books.filter((b) => b.status === 'want');
-  const read = books
-    .filter((b) => b.status === 'read')
+  const completedReadings = readingHistory.filter((book) => book.status === 'read' && book.finishedAt);
+  const read = latestCompletedByBook(completedReadings)
     .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''));
 
   const year = new Date().getFullYear();
-  const finishedThisYear = read.filter(
+  const finishedThisYear = completedReadings.filter(
     (b) => b.finishedAt && new Date(b.finishedAt).getFullYear() === year
   );
   const pagesThisYear = pagesInYear(sessions, year);

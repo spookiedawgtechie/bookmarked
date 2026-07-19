@@ -4,7 +4,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { getAllBooks } from '../../lib/db';
+import { getAllBooks, getAllReadingHistory } from '../../lib/db';
+import { latestCompletedByBook } from '../../lib/readings';
 import { colors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
 
@@ -46,9 +47,10 @@ export default function StatusList() {
 
   useFocusEffect(
     useCallback(() => {
-      getAllBooks(db).then((all) => {
+      const source = status === 'read' ? getAllReadingHistory(db) : getAllBooks(db);
+      source.then((all) => {
         const filtered = all.filter((b) => b.status === status);
-        setBooks(filtered);
+        setBooks(status === 'read' ? latestCompletedByBook(filtered) : filtered);
       });
     }, [db, status])
   );

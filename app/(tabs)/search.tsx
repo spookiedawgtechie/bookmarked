@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { notify } from '../../lib/alert';
-import { addBook } from '../../lib/db';
+import { addBook, getOwnedOlKeys } from '../../lib/db';
 import { searchBooks, type SearchResult } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
 
@@ -23,11 +23,11 @@ export default function Search() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ownedKeys, setOwnedKeys] = useState<Set<string>>(new Set());
+  const [addingKeys, setAddingKeys] = useState<Set<string>>(new Set());
+  const addingKeysRef = useRef(new Set<string>());
 
   const refreshOwned = useCallback(() => {
-    db.getAllAsync<{ ol_key: string }>('SELECT ol_key FROM books').then((rows) =>
-      setOwnedKeys(new Set(rows.map((r) => r.ol_key)))
-    );
+    getOwnedOlKeys(db).then((keys) => setOwnedKeys(new Set(keys)));
   }, [db]);
 
   useFocusEffect(refreshOwned);
@@ -66,6 +66,9 @@ export default function Search() {
   }, [query]);
 
   async function onAdd(item: SearchResult) {
+    if (addingKeysRef.current.has(item.key)) return;
+    addingKeysRef.current.add(item.key);
+    setAddingKeys(new Set(addingKeysRef.current));
     try {
       await addBook(db, {
         olKey: item.key,
@@ -73,10 +76,18 @@ export default function Search() {
         author: item.author,
         coverUrl: item.coverUrl,
         totalPages: item.pages,
+        editionKey: item.editionKey,
+        isbn: item.isbn,
+        publisher: item.publisher,
+        publishDate: item.publishDate,
+        language: item.language,
       });
       refreshOwned();
     } catch {
       notify('Add failed', 'Could not add the book. Try again.');
+    } finally {
+      addingKeysRef.current.delete(item.key);
+      setAddingKeys(new Set(addingKeysRef.current));
     }
   }
 
@@ -112,6 +123,7 @@ export default function Search() {
         contentContainerStyle={{ paddingBottom: 32 }}
         renderItem={({ item }) => {
           const owned = ownedKeys.has(item.key);
+          const adding = addingKeys.has(item.key);
           return (
             <View style={styles.row}>
               {item.coverUrl ? (
@@ -135,17 +147,28 @@ export default function Search() {
                   {item.year ? ` · ${item.year}` : ''}
                 </Text>
                 {item.pages && <Text style={styles.meta}>{item.pages} pages</Text>}
+                {(item.publisher || item.publishDate) && (
+                  <Text style={styles.meta} numberOfLines={1}>
+                    {[item.publisher, item.publishDate].filter(Boolean).join(' · ')}
+                  </Text>
+                )}
               </View>
               <Pressable
-                style={[styles.addBtn, owned && styles.addBtnOwned]}
-                disabled={owned}
+                style={[styles.addBtn, (owned || adding) && styles.addBtnOwned]}
+                disabled={owned || adding}
                 onPress={() => onAdd(item)}
                 accessibilityRole="button"
-                accessibilityLabel={owned ? `${item.title} is already in your library` : `Add ${item.title} to your library`}
-                accessibilityState={{ disabled: owned }}
+                accessibilityLabel={
+                  owned
+                    ? `${item.title} is already in your library`
+                    : adding
+                      ? `Adding ${item.title}`
+                      : `Add ${item.title} to your library`
+                }
+                accessibilityState={{ disabled: owned || adding, busy: adding }}
               >
                 <Text style={[styles.addBtnText, owned && { color: colors.textDim }]}>
-                  {owned ? '✓' : '+'}
+                  {owned ? '✓' : adding ? '…' : '+'}
                 </Text>
               </Pressable>
             </View>
