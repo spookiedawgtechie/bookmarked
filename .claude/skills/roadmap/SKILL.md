@@ -15,7 +15,7 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 - 10-point rating scale, half steps (REAL 0.5–10).
 - Page-number slider for progress (he reads ~90% physical books); percentage is derived, never entered.
 - AMOLED pure-black theme is the identity. A light theme was considered and consciously deferred indefinitely.
-- Dense 4-column grids.
+- Dense phone grids with responsive PWA scaling: 4 columns on phones, 5 on tablets/small web, 6 on desktop; library content is capped at 1200px and readable screens at 900px.
 - Distribution: sideloaded APK (Android) + PWA on Vercel (iOS/desktop). No app stores, no paid Apple Developer account.
 
 ## Deferred features, in the order previously agreed
@@ -37,7 +37,7 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 - Phase 1 is implemented: lightweight regression tests cover stats, Open Library edition mapping, and database transaction behavior; GitHub Actions runs tests, strict typecheck, and Android/web production exports on Node 22.
 - `logProgress` now commits its session delta, current-page update, and automatic read transition in one cross-platform transaction. Direct status changes do not fabricate a session because historical books may be backdated.
 - Owner verified final-page completion through both Shelf and detail flows. The v3 schema migration is implemented in code: versioned transactional Work → physical item → reading/reread → session storage, ownership states, edition metadata, historical recap queries, backup v3 merge/keep-newer with tombstones, and rollback fixtures.
-- Still pending owner verification in Expo Go/PWA with a copied real backup before any APK build. Multi-copy creation/edition replacement UI is not yet exposed; the schema already supports it. Do not deploy or build until explicitly requested.
+- Owner verified migration survival, legacy backup import, rereads, ownership controls, and persistent storage in Expo Go/PWA. Completed readings are now protected: starting again creates a reread, while moving a completed entry back to Want requires an explicit correction warning. Responsive desktop layout is implemented but still needs the owner's final 27-inch visual check. Multi-copy creation/edition replacement UI is not yet exposed; the schema already supports it. Do not deploy or build until explicitly requested.
 
 ## Explicitly rejected
 

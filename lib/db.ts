@@ -496,13 +496,21 @@ export async function addBook(
 }
 
 async function latestReadingId(db: SQLiteDatabase, itemId: number): Promise<number> {
-  const reading = await db.getFirstAsync<{ id: number }>(
-    `SELECT id FROM reading_entries WHERE library_item_id = ?
+  const reading = await latestReading(db, itemId);
+  return reading.id;
+}
+
+async function latestReading(
+  db: SQLiteDatabase,
+  itemId: number
+): Promise<{ id: number; status: BookStatus }> {
+  const reading = await db.getFirstAsync<{ id: number; status: BookStatus }>(
+    `SELECT id, status FROM reading_entries WHERE library_item_id = ?
      ORDER BY sequence DESC LIMIT 1`,
     itemId
   );
   if (!reading) throw new Error('Reading entry not found');
-  return reading.id;
+  return reading;
 }
 
 export async function setStatus(
@@ -511,7 +519,11 @@ export async function setStatus(
   status: BookStatus
 ): Promise<void> {
   const now = new Date().toISOString();
-  const readingId = await latestReadingId(db, id);
+  const reading = await latestReading(db, id);
+  if (reading.status === 'read' && status !== 'read') {
+    throw new Error('Completed readings must be preserved or explicitly corrected');
+  }
+  const readingId = reading.id;
   if (status === 'reading') {
     await db.runAsync(
       `UPDATE reading_entries SET status = ?, started_at = COALESCE(started_at, ?),
@@ -542,6 +554,21 @@ export async function setStatus(
       readingId
     );
   }
+}
+
+export async function correctCompletedReadingToWant(
+  db: SQLiteDatabase,
+  id: number
+): Promise<void> {
+  const now = new Date().toISOString();
+  const reading = await latestReading(db, id);
+  if (reading.status !== 'read') throw new Error('Only a completed reading can be corrected');
+  await db.runAsync(
+    `UPDATE reading_entries SET status = 'want', current_page = 0,
+     started_at = NULL, finished_at = NULL, updated_at = ? WHERE id = ?`,
+    now,
+    reading.id
+  );
 }
 
 export async function logProgress(

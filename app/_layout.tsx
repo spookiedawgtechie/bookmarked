@@ -170,6 +170,7 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: colors.bg },
           headerTintColor: colors.text,
           headerTitleStyle: { color: colors.text },
+          headerTitleAlign: Platform.OS === 'web' ? 'center' : undefined,
           contentStyle: { backgroundColor: colors.bg },
         }}
       >

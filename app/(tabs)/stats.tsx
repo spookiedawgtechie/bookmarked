@@ -7,6 +7,7 @@ import { exportLibrary, importLibrary } from '../../lib/backup-file';
 import { getAllBooks, getAllReadingHistory, getAllSessions } from '../../lib/db';
 import { pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
+import { readableContentStyle } from '../../lib/layout';
 import type { Book, ReadingSession } from '../../lib/types';
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -55,7 +56,10 @@ export default function Stats() {
     .sort((a, b) => b - a);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[readableContentStyle, styles.pageContent]}
+    >
       <Text style={styles.heading}>{year}</Text>
       <View style={styles.cardRow}>
         <StatCard label="Books finished" value={String(finishedThisYear.length)} />
@@ -171,6 +175,7 @@ export default function Stats() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  pageContent: { padding: 16, paddingBottom: 96 },
   heading: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: 16 },
   subheading: {
     color: colors.textDim,

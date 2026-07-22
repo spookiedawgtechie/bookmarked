@@ -15,6 +15,7 @@ import { notify } from '../../lib/alert';
 import { addBook, getOwnedOlKeys } from '../../lib/db';
 import { searchBooks, type SearchResult } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
+import { readableContentStyle } from '../../lib/layout';
 
 export default function Search() {
   const db = useSQLiteContext();
@@ -93,7 +94,8 @@ export default function Search() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.inputWrap}>
+      <View style={[readableContentStyle, styles.content]}>
+        <View style={styles.inputWrap}>
         <TextInput
           style={styles.input}
           placeholder="Search books…"
@@ -114,14 +116,14 @@ export default function Search() {
             <Text style={styles.clearBtnText}>✕</Text>
           </Pressable>
         )}
-      </View>
-      {loading && <ActivityIndicator color={colors.green} style={{ marginTop: 24 }} />}
-      {error && <Text style={styles.error}>{error}</Text>}
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.key}
-        contentContainerStyle={{ paddingBottom: 32 }}
-        renderItem={({ item }) => {
+        </View>
+        {loading && <ActivityIndicator color={colors.green} style={{ marginTop: 24 }} />}
+        {error && <Text style={styles.error}>{error}</Text>}
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={{ paddingBottom: 96 }}
+          renderItem={({ item }) => {
           const owned = ownedKeys.has(item.key);
           const adding = addingKeys.has(item.key);
           return (
@@ -173,14 +175,16 @@ export default function Search() {
               </Pressable>
             </View>
           );
-        }}
-      />
+          }}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 16 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  content: { flex: 1, paddingHorizontal: 16 },
   inputWrap: { marginTop: 12, marginBottom: 12, justifyContent: 'center' },
   input: {
     backgroundColor: colors.card,

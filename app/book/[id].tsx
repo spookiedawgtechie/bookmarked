@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import {
   deleteBook,
+  correctCompletedReadingToWant,
   getBook,
   getReadingHistoryForBook,
   logProgress,
@@ -37,6 +38,7 @@ import { confirmDialog, notify } from '../../lib/alert';
 import { formatDate } from '../../lib/format';
 import { coverUrl, fetchCoverIds, fetchDescription, sanitizeDescription } from '../../lib/openlibrary';
 import { colors } from '../../lib/theme';
+import { readableContentStyle } from '../../lib/layout';
 import type { Book, BookOwnership, BookStatus } from '../../lib/types';
 
 const STATUSES: { value: BookStatus; label: string; accent: string }[] = [
@@ -171,6 +173,28 @@ export default function BookDetail() {
       : null;
 
   async function onStatus(status: BookStatus) {
+    if (!book) return;
+    if (status === book.status) return;
+    if (book.status === 'read' && status === 'reading') {
+      onStartReread();
+      return;
+    }
+    if (book.status === 'read' && status === 'want') {
+      confirmDialog(
+        'Correct finished status?',
+        'This removes the current completion date and resets progress to page 0. Use Start reread if you are reading the book again.',
+        'Move to Want to Read',
+        async () => {
+          try {
+            await correctCompletedReadingToWant(db, bookId);
+            await reload();
+          } catch {
+            notify('Save failed', 'Could not correct the reading status. Try again.');
+          }
+        }
+      );
+      return;
+    }
     try {
       await setStatus(db, bookId, status);
       reload();
@@ -353,7 +377,7 @@ export default function BookDetail() {
       <ScrollView
         ref={scrollRef}
         style={styles.screen}
-        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+        contentContainerStyle={[readableContentStyle, styles.pageContent]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
@@ -815,6 +839,7 @@ export default function BookDetail() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  pageContent: { padding: 16, paddingBottom: 48 },
   header: { flexDirection: 'row', marginBottom: 20 },
   cover: { width: 100, height: 150, borderRadius: 8, backgroundColor: colors.border },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
@@ -830,6 +855,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   pickerCard: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
     backgroundColor: colors.card,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,

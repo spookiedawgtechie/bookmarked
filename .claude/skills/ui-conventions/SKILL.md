@@ -10,12 +10,13 @@ description: Bookmarked's UI patterns — AMOLED theme, layout math, cross-platf
 - **AMOLED dark is the identity**: background pure `#000000`, cards `#141414`, Letterboxd accents — green `#00E054` (reading/primary actions), blue `#40BCF4` (want to read), orange `#FF8000` (read/ratings). All colors come from `lib/theme.ts` — never hardcode a color in a screen.
 - Plain `StyleSheet.create` — no NativeWind/styled-components. Match the existing style: section labels are 13px uppercase with letterSpacing, cards use borderRadius 10–14.
 - Tab icons are emoji (vector icons were never installed). If upgrading, `@expo/vector-icons` is Expo Go-safe but is NOT currently a dependency — `npx expo install @expo/vector-icons` first.
-- Owner preference: dense grids — home rows and list screens use **4 columns** (`GRID_COLS = 4`).
+- Owner preference: dense grids. Use the shared helpers in `lib/layout.ts`: **4 columns** below 700px, **5 columns** from 700px, and **6 columns** from 1100px. Library surfaces stop growing at 1200px; reading/detail surfaces stop at 900px.
 
 ## Layout math (home screen)
 
-Home rows sit inside cards: screen padding 16/side + card padding `CARD_PAD = 12`/side. Thumb width is computed to fill the card interior exactly:
-`COVER_W = floor((windowWidth - 32 - 2*CARD_PAD - (GRID_COLS-1)*GRID_GAP) / GRID_COLS)`, height = `1.5 × width` (book aspect). The full-grid list screens (`app/list/[status].tsx`) have no card, so they omit the `CARD_PAD` term. If you change padding anywhere, keep these formulas in sync or covers will overflow/underfill.
+Home rows sit inside cards: screen padding 16/side + card padding `CARD_PAD = 12`/side. `gridCoverWidth()` first constrains the viewport to `LIBRARY_MAX_WIDTH`, then fills the selected column count exactly; height remains `1.5 × width` (book aspect). The full-grid list screens (`app/list/[status].tsx`) omit the card-padding inset. Never duplicate this math in a screen—change `lib/layout.ts` and its `tests/layout.test.ts` expectations together.
+
+On desktop, the Shelf uses the 1200px library canvas and wraps Currently Reading cards into two columns. Search, Stats, detail, and recap use the centered 900px readable canvas. The web tab bar is compact and centered; Android keeps the native full-width tab bar. Preserve phone spacing and behavior when adjusting desktop styles.
 
 ## Cross-platform pitfalls (the app ships to Android APK AND web PWA)
 

@@ -6,10 +6,14 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDime
 import { useFocusEffect } from 'expo-router';
 import { getAllBooks, getAllReadingHistory } from '../../lib/db';
 import { latestCompletedByBook } from '../../lib/readings';
+import {
+  gridCoverWidth,
+  libraryContentStyle,
+  libraryGridColumns,
+} from '../../lib/layout';
 import { colors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
 
-const GRID_COLS = 4;
 const GRID_GAP = 10;
 
 const TITLES: Record<string, string> = {
@@ -42,7 +46,8 @@ export default function StatusList() {
   // Computed from live window size (not module-scope Dimensions.get) so
   // web resizes and orientation changes recompute the grid.
   const { width } = useWindowDimensions();
-  const coverW = Math.floor((width - 32 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
+  const columns = libraryGridColumns(width);
+  const coverW = gridCoverWidth(width, columns, 32, GRID_GAP);
   const coverSize = { width: coverW, height: Math.floor(coverW * 1.5) };
 
   useFocusEffect(
@@ -83,7 +88,7 @@ export default function StatusList() {
       <Stack.Screen options={{ title: TITLES[status ?? ''] ?? 'Books' }} />
       <ScrollView
         style={styles.screen}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={[libraryContentStyle, styles.pageContent]}
       >
         <TextInput
           style={styles.searchInput}
@@ -171,6 +176,7 @@ export default function StatusList() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  pageContent: { padding: 16, paddingBottom: 48 },
   searchInput: {
     backgroundColor: colors.card,
     borderColor: colors.border,

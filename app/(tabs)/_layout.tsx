@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { colors } from '../../lib/theme';
 
 type TabSymbol = SymbolViewProps['name'];
@@ -15,7 +15,23 @@ export default function TabsLayout() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.bg },
         headerTitleStyle: { color: colors.text },
-        tabBarStyle: { backgroundColor: colors.bg, borderTopColor: colors.border },
+        headerTitleAlign: Platform.OS === 'web' ? 'center' : undefined,
+        tabBarStyle: {
+          backgroundColor: colors.bg,
+          borderTopColor: colors.border,
+          ...(Platform.OS === 'web'
+            ? {
+                width: '92%',
+                maxWidth: 720,
+                alignSelf: 'center',
+                marginBottom: 12,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 16,
+                overflow: 'hidden' as const,
+              }
+            : null),
+        },
         tabBarActiveTintColor: colors.green,
         tabBarInactiveTintColor: colors.textDim,
         sceneStyle: { backgroundColor: colors.bg },

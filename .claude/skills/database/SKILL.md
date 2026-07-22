@@ -42,6 +42,8 @@ One attempt/reread: portable `uid`, item FK, positive sequence, status, current 
 
 `startReread()` only accepts a finished latest entry and atomically creates the next deterministic `reading:<item-uid>:<sequence>` entry at page 0. The previous rating/review/dates remain visible in detail history and count independently in recaps.
 
+A completed entry is historical data, not an editable state toggle. Generic `setStatus()` rejects `read -> reading/want`: `read -> reading` must call `startReread()`, while `read -> want` must use the explicit correction flow after destructive confirmation. The correction resets progress/start/finish on that entry but does not create a reread or silently discard completion from an ordinary status tap.
+
 ### sessions
 
 Immutable page-delta history: portable `uid`, reading-entry FK, logged/update timestamp, from/to page. Positive deltas power pages, pace, heatmaps, and streaks. `books.current_page` no longer exists; the latest reading entry stores current position.
@@ -62,6 +64,7 @@ Deleting a physical copy writes a `library_item` tombstone and cascades its read
 
 - `logProgress()` is the only page-write path. One transaction inserts the session, updates current page, and marks the entry read at the last page. It returns whether completion occurred.
 - Direct `setStatus(..., 'read')` does not fabricate a session: old books may be backdated, and crediting all pages to today corrupts yearly stats.
+- Direct `setStatus()` cannot move a completed entry away from `read`; use `startReread()` or `correctCompletedReadingToWant()` according to user intent.
 - Rating/review/status/progress/finish date update `reading_entries.updated_at`.
 - Title/edition/copy metadata/ownership/cover/pages/notes update `library_items.updated_at`.
 - Description updates `works.updated_at`. Complete timestamps are required for backup keep-newer semantics.

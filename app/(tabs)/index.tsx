@@ -15,11 +15,16 @@ import {
 import { notify } from '../../lib/alert';
 import { getAllBooks, getAllReadingHistory, getAllSessions, logProgress } from '../../lib/db';
 import { latestCompletedByBook } from '../../lib/readings';
+import {
+  gridCoverWidth,
+  isDesktopWidth,
+  libraryContentStyle,
+  libraryGridColumns,
+} from '../../lib/layout';
 import { currentStreakDays, pagesInLastDays, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
 
-const GRID_COLS = 4;
 const GRID_GAP = 10;
 // Home rows sit inside cards (screen padding 16 + card padding 12 per side),
 // so thumbs are sized to fill the card interior exactly. Sizes come from
@@ -27,12 +32,18 @@ const GRID_GAP = 10;
 // orientation changes recompute the grid.
 const CARD_PAD = 12;
 
-function useCoverSize() {
-  const { width } = useWindowDimensions();
-  const coverW = Math.floor(
-    (width - 32 - CARD_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS
+function coverMetrics(windowWidth: number) {
+  const columns = libraryGridColumns(windowWidth);
+  const coverW = gridCoverWidth(
+    windowWidth,
+    columns,
+    32 + CARD_PAD * 2,
+    GRID_GAP
   );
-  return { width: coverW, height: Math.floor(coverW * 1.5) };
+  return {
+    columns,
+    coverSize: { width: coverW, height: Math.floor(coverW * 1.5) },
+  };
 }
 
 function progressPct(book: Book): number | null {
@@ -40,8 +51,15 @@ function progressPct(book: Book): number | null {
   return Math.round((book.currentPage / book.totalPages) * 100);
 }
 
-function CoverThumb({ book, showRating }: { book: Book; showRating?: boolean }) {
-  const coverSize = useCoverSize();
+function CoverThumb({
+  book,
+  coverSize,
+  showRating,
+}: {
+  book: Book;
+  coverSize: { width: number; height: number };
+  showRating?: boolean;
+}) {
   return (
     <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
       <Pressable
@@ -74,11 +92,19 @@ function CoverThumb({ book, showRating }: { book: Book; showRating?: boolean }) 
   );
 }
 
-function HeroCard({ book, onLog }: { book: Book; onLog: (b: Book) => void }) {
+function HeroCard({
+  book,
+  desktop,
+  onLog,
+}: {
+  book: Book;
+  desktop: boolean;
+  onLog: (b: Book) => void;
+}) {
   const pct = progressPct(book);
   return (
     <Pressable
-      style={styles.hero}
+      style={[styles.hero, desktop && styles.heroDesktop]}
       onPress={() => router.push({ pathname: '/book/[id]', params: { id: String(book.id) } })}
       accessibilityRole="button"
       accessibilityLabel={`${book.title} by ${book.author || 'unknown author'}${
@@ -149,6 +175,9 @@ function RowHeader({ label, accent, href }: { label: string; accent: string; hre
 
 export default function Shelf() {
   const db = useSQLiteContext();
+  const { width } = useWindowDimensions();
+  const { columns, coverSize } = coverMetrics(width);
+  const desktop = isDesktopWidth(width);
   const [books, setBooks] = useState<Book[]>([]);
   const [readingHistory, setReadingHistory] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
@@ -204,7 +233,10 @@ export default function Shelf() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 32 }}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[libraryContentStyle, styles.pageContent]}
+    >
       {books.length === 0 && (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Your shelf is empty</Text>
@@ -224,9 +256,11 @@ export default function Shelf() {
       {reading.length > 0 && (
         <View style={styles.section}>
           <RowHeader label="Currently Reading" accent={colors.green} />
-          {reading.map((b) => (
-            <HeroCard key={b.id} book={b} onLog={openLog} />
-          ))}
+          <View style={styles.heroGrid}>
+            {reading.map((b) => (
+              <HeroCard key={b.id} book={b} desktop={desktop} onLog={openLog} />
+            ))}
+          </View>
         </View>
       )}
 
@@ -243,8 +277,8 @@ export default function Shelf() {
         <View style={styles.section}>
           <RowHeader label="Up next" accent={colors.blue} href="/list/want" />
           <View style={styles.rowCard}>
-            {want.slice(0, GRID_COLS).map((b) => (
-              <CoverThumb key={b.id} book={b} />
+            {want.slice(0, columns).map((b) => (
+              <CoverThumb key={b.id} book={b} coverSize={coverSize} />
             ))}
           </View>
         </View>
@@ -254,8 +288,8 @@ export default function Shelf() {
         <View style={styles.section}>
           <RowHeader label="Recently finished" accent={colors.orange} href="/list/read" />
           <View style={styles.rowCard}>
-            {read.slice(0, GRID_COLS).map((b) => (
-              <CoverThumb key={b.id} book={b} showRating />
+            {read.slice(0, columns).map((b) => (
+              <CoverThumb key={b.id} book={b} coverSize={coverSize} showRating />
             ))}
           </View>
         </View>
@@ -360,6 +394,7 @@ export default function Shelf() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  pageContent: { paddingBottom: 96 },
   paceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -382,12 +417,14 @@ const styles = StyleSheet.create({
   },
   seeAll: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
   hero: {
+    width: '100%',
     flexDirection: 'row',
     backgroundColor: colors.card,
     borderRadius: 14,
     padding: CARD_PAD,
-    marginBottom: 12,
   },
+  heroGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  heroDesktop: { width: '49%', marginBottom: 0 },
   heroCover: { width: 96, height: 144, borderRadius: 8, backgroundColor: colors.border },
   heroBody: { flex: 1, marginLeft: 14, justifyContent: 'center' },
   heroTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
@@ -462,6 +499,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalCard: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
     backgroundColor: colors.card,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,

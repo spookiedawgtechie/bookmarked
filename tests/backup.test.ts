@@ -9,6 +9,7 @@ import {
 } from '../lib/backup';
 import {
   addBook,
+  correctCompletedReadingToWant,
   deleteBook,
   getAllBooks,
   getAllReadingHistory,
@@ -226,6 +227,13 @@ test('a reread creates a new current entry while preserving completed history', 
   const original = (await getAllBooks(adapter.asDatabase()))[0];
   await setStatus(adapter.asDatabase(), original.id, 'read');
   await setRating(adapter.asDatabase(), original.id, 9);
+  const finishedBefore = (await getAllBooks(adapter.asDatabase()))[0].finishedAt;
+
+  await assert.rejects(
+    () => setStatus(adapter.asDatabase(), original.id, 'reading'),
+    /Completed readings must be preserved/
+  );
+  assert.equal((await getAllBooks(adapter.asDatabase()))[0].finishedAt, finishedBefore);
   await startReread(adapter.asDatabase(), original.id);
 
   const current = (await getAllBooks(adapter.asDatabase()))[0];
@@ -236,6 +244,21 @@ test('a reread creates a new current entry while preserving completed history', 
   assert.equal(current.readingSequence, 2);
   assert.equal(history.length, 2);
   assert.equal(history.find((reading) => reading.readingSequence === 1)?.rating, 9);
+});
+
+test('explicitly correcting a completed reading resets status without creating a reread', async () => {
+  const adapter = await databaseWithBook();
+  const original = (await getAllBooks(adapter.asDatabase()))[0];
+  await setStatus(adapter.asDatabase(), original.id, 'read');
+
+  await correctCompletedReadingToWant(adapter.asDatabase(), original.id);
+
+  const corrected = (await getAllBooks(adapter.asDatabase()))[0];
+  assert.equal(corrected.status, 'want');
+  assert.equal(corrected.currentPage, 0);
+  assert.equal(corrected.startedAt, null);
+  assert.equal(corrected.finishedAt, null);
+  assert.equal(corrected.readingSequence, 1);
 });
 
 test('a failure late in backup import rolls back every earlier entity write', async () => {

@@ -10,6 +10,7 @@ import { formatDateShort, plural } from '../../lib/format';
 import { shareFile } from '../../lib/share';
 import { dailyPagesInYear, dateKey, pagesByMonth, pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
+import { readableContentStyle } from '../../lib/layout';
 import type { Book, ReadingSession } from '../../lib/types';
 
 const MONTH_LABELS = [
@@ -200,7 +201,7 @@ export default function Recap() {
       <Stack.Screen options={{ title: `${y} in books` }} />
       <ScrollView
         style={styles.screen}
-        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+        contentContainerStyle={[readableContentStyle, styles.pageContent]}
       >
         {books.length === 0 && !hasSessionsThisYear && (
           <Text style={styles.emptyText}>Nothing tracked in {y} yet.</Text>
@@ -405,6 +406,7 @@ export default function Recap() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  pageContent: { padding: 16, paddingBottom: 48 },
   shareCard: { backgroundColor: colors.bg, paddingVertical: 8 },
   brandLabel: {
     color: colors.green,
