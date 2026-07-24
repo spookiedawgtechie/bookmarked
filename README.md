@@ -19,6 +19,7 @@ A personal, local-first book tracker — a Letterboxd for books. Search Open Lib
 - **Backup & restore** — validated backup v3 JSON with portable IDs, transactional import, keep-newer conflict handling, deletion tombstones, and legacy-backup compatibility
 - **Library metrics** — yearly activity, all-time reading count, current-reading count, and total tracked physical copies
 - **Accessible controls** — named cover actions, screen-reader-adjustable sliders, chart summaries, and cross-platform tab icons
+- **Release notes** — a once-per-version “What’s new” summary on APK and PWA, permanently reopenable from Stats
 - **Dark, dense, AMOLED-black UI** — built for one thing: tracking books, not chasing engagement
 
 ## Stack
@@ -41,6 +42,7 @@ Scan the QR code with [Expo Go](https://expo.dev/go) on your phone, or press `w`
 
 ```
 app/            expo-router screens (file-based routing)
+components/     shared cross-platform UI, including the release-notes modal
 lib/            all data access (SQLite) and business logic — screens never touch SQL directly
 assets/         app icons
 public/         PWA manifest, icons, Open Graph image
@@ -52,6 +54,7 @@ The one-sentence architecture: a React app whose backend is a SQLite file sittin
 
 ## Releases
 
+- **Current release** — Bookmarked 2.0.0. See [CHANGELOG.md](CHANGELOG.md) for the complete user-facing changes.
 - **Android** — built via `eas build --profile preview`, distributed as a direct-install APK (no Play Store). See `.claude/skills/release-android/SKILL.md`.
 - **Web** — `vercel --prod`, deployed from `.claude/skills/release-pwa/SKILL.md`'s process. Works as an installable PWA (Add to Home Screen on iOS/Android).
 

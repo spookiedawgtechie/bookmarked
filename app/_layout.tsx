@@ -1,9 +1,15 @@
 import { Stack } from 'expo-router';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { migrate } from '../lib/db';
+import { WhatsNewModal } from '../components/WhatsNewModal';
+import { getAppSetting, migrate, setAppSetting } from '../lib/db';
+import {
+  CURRENT_RELEASE,
+  LAST_SEEN_RELEASE_KEY,
+  shouldShowRelease,
+} from '../lib/releases';
 import { colors } from '../lib/theme';
 
 type TabGateState = 'checking' | 'ready' | 'blocked';
@@ -120,6 +126,52 @@ function useSingleWebTab(attempt: number): TabGateState {
   return state;
 }
 
+function ReleaseNotesGate() {
+  const db = useSQLiteContext();
+  const [visible, setVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getAppSetting(db, LAST_SEEN_RELEASE_KEY)
+      .then((lastSeen) => {
+        if (active && shouldShowRelease(lastSeen)) setVisible(true);
+      })
+      .catch(() => {
+        // Release notes are helpful but must never prevent the library opening.
+      });
+    return () => {
+      active = false;
+    };
+  }, [db]);
+
+  async function dismiss() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await setAppSetting(db, LAST_SEEN_RELEASE_KEY, CURRENT_RELEASE.id);
+      setVisible(false);
+    } catch {
+      setError('Could not save this acknowledgement. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <WhatsNewModal
+      visible={visible}
+      onDismiss={() => {
+        void dismiss();
+      }}
+      saving={saving}
+      error={error}
+    />
+  );
+}
+
 export default function RootLayout() {
   const [tabAttempt, setTabAttempt] = useState(0);
   const tabState = useSingleWebTab(tabAttempt);
@@ -177,6 +229,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="book/[id]" options={{ title: 'Book' }} />
       </Stack>
+      <ReleaseNotesGate />
     </SQLiteProvider>
   );
 }

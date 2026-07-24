@@ -23,6 +23,8 @@ On the phone: open **Expo Go** (same Wi-Fi as the PC), scan the QR, or "Enter UR
 
 JS edits hot-reload in ~1s. Press `r` in the terminal to force reload, `--clear` flag on start to reset Metro's cache after dependency changes.
 
+After Expo Go or any SDK package updates, run `npx expo install --check` and `npx expo-doctor`. Use `npx expo install --fix` for patch alignment, install any reported native peer directly, stop the existing Metro process, then restart with `npm start -- --clear`. Never run npm installs while relying on the same live Metro watcher; replacing `node_modules` invalidates its file watches.
+
 ## Expo Go — critical facts
 
 - **Expo Go on the Play Store lags behind the project SDK.** If the app says "Project is incompatible with this version of Expo Go", sideload the matching version from Expo's official releases: https://github.com/expo/expo-go-releases (e.g. `Expo-Go-57.0.2.apk`). Uninstall the Play Store copy first.

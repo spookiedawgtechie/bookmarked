@@ -13,7 +13,7 @@ Run all gates from the project root. GitHub Actions repeats the automated gates 
 npm test
 ```
 
-The lightweight `node:test` suite runs through `tsx`. It covers stats/read-shelf math, Open Library metadata mapping, atomic progress, real-SQLite versioned migration/rollback, backup v3 validation/merge/tombstones/rollback, and reread preservation. Add a focused regression test whenever a pure function or database invariant changes. Node prints an expected experimental warning for the built-in `node:sqlite` fixture adapter.
+The lightweight `node:test` suite runs through `tsx`. It covers stats/read-shelf math, Open Library metadata mapping, atomic progress, real-SQLite versioned migration/rollback, backup v3 validation/merge/tombstones/rollback, reread preservation, release acknowledgement, and release-version synchronization. Add a focused regression test whenever a pure function or database invariant changes. Node prints an expected experimental warning for the built-in `node:sqlite` fixture adapter.
 
 ## Gate 2 — TypeScript (always)
 

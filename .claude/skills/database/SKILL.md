@@ -50,7 +50,7 @@ Immutable page-delta history: portable `uid`, reading-entry FK, logged/update ti
 
 ### tombstones and app_settings
 
-Deleting a physical copy writes a `library_item` tombstone and cascades its readings/sessions. Tombstones travel in backup v3 so importing an older backup cannot resurrect deleted data. `app_settings` reserves versioned local settings.
+Deleting a physical copy writes a `library_item` tombstone and cascades its readings/sessions. Tombstones travel in backup v3 so importing an older backup cannot resurrect deleted data. `app_settings` stores device-local settings through parameterized `getAppSetting()` / `setAppSetting()` calls. The current use is `last_seen_release` for the once-per-release changelog; settings are intentionally excluded from backups so each APK/PWA database acknowledges updates independently.
 
 ## Compatibility query rules
 

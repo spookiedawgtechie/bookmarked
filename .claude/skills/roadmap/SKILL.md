@@ -39,6 +39,13 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 - Owner verified final-page completion through both Shelf and detail flows. The v3 schema migration is implemented in code: versioned transactional Work → physical item → reading/reread → session storage, ownership states, edition metadata, historical recap queries, backup v3 merge/keep-newer with tombstones, and rollback fixtures.
 - Owner verified migration survival, legacy backup import, rereads, ownership controls, and persistent storage in Expo Go/PWA. Completed readings are now protected: starting again creates a reread, while moving a completed entry back to Want requires an explicit correction warning. Responsive desktop layout is implemented but still needs the owner's final 27-inch visual check. Multi-copy creation/edition replacement UI is not yet exposed; the schema already supports it. Do not deploy or build until explicitly requested.
 
+## Bookmarked 2.0 release candidate (2026-07-24)
+
+- App/package version is 2.0.0. `CHANGELOG.md` is the human release record; `lib/releases.ts` is the in-app source of truth.
+- APK and PWA show `components/WhatsNewModal.tsx` once per local database. “Got it” writes `last_seen_release` to `app_settings`; Stats always exposes the current notes again.
+- SDK 57 packages are aligned with current Expo Go and the required `expo-font` peer is installed. Tests, strict typecheck, Android export, web export, and PWA postbuild pass.
+- Still required before shipping: owner visual/device check of the release modal, final 27-inch PWA layout check, and one real update-path check that existing books remain untouched. Do not queue EAS or deploy Vercel until explicitly requested.
+
 ## Explicitly rejected
 
 - Social/accounts (personal app), barcode scanning (search is fast enough; camera lib risk in Expo Go), generic state-management libraries (DB-on-focus pattern is the architecture), `updateBook(fields)`-style generic setters.

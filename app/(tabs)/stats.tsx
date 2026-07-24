@@ -2,12 +2,14 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { WhatsNewModal } from '../../components/WhatsNewModal';
 import { confirmDialog, notify } from '../../lib/alert';
 import { exportLibrary, importLibrary } from '../../lib/backup-file';
 import { getAllBooks, getAllReadingHistory, getAllSessions } from '../../lib/db';
 import { pagesInYear } from '../../lib/stats';
 import { colors } from '../../lib/theme';
 import { readableContentStyle } from '../../lib/layout';
+import { CURRENT_RELEASE } from '../../lib/releases';
 import type { Book, ReadingSession } from '../../lib/types';
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -24,6 +26,7 @@ export default function Stats() {
   const [books, setBooks] = useState<Book[]>([]);
   const [readings, setReadings] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -169,6 +172,22 @@ export default function Stats() {
         <Text style={styles.recapRowText}>Import library from JSON</Text>
         <Text style={styles.recapRowArrow}>↑</Text>
       </Pressable>
+
+      <Text style={styles.subheading}>About</Text>
+      <Pressable
+        style={styles.recapRow}
+        onPress={() => setReleaseNotesOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open what's new in Bookmarked ${CURRENT_RELEASE.id}`}
+      >
+        <Text style={styles.recapRowText}>What&apos;s new in {CURRENT_RELEASE.id}</Text>
+        <Text style={styles.recapRowArrow}>→</Text>
+      </Pressable>
+
+      <WhatsNewModal
+        visible={releaseNotesOpen}
+        onDismiss={() => setReleaseNotesOpen(false)}
+      />
     </ScrollView>
   );
 }

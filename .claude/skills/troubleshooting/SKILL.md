@@ -17,6 +17,18 @@ Diagnose: diff recently added dependencies against Expo Go compatibility (SDK-57
 
 Play Store Expo Go lags the project SDK. Sideload the matching APK from https://github.com/expo/expo-go-releases (uninstall the store copy first). Not fixable from code.
 
+## Expo Go bundle hangs/errors after an Expo Go or SDK patch update
+
+If tests/typecheck and `npx expo export --platform android` pass but the live Expo Go bundle hangs or fails, check SDK patch alignment before changing app code:
+
+```powershell
+npx expo install --check
+npx expo install --fix
+npx expo-doctor
+```
+
+All native-facing Expo packages must match the versions expected by the installed `expo` patch. `expo-symbols` also requires a direct `expo-font` dependency; Expo Doctor reports this even when Expo Go temporarily masks it. Stop every old Metro process after npm changes and restart with `npm start -- --clear`—a stale process can keep serving the old dependency graph or crash its watcher while `node_modules` is replaced.
+
 ## EAS build fails in "Install dependencies" phase within seconds
 
 npm `ERESOLVE` peer conflict — `@expo/ui` → `react-dom@19.2.x` vs Expo-pinned `react`. The standing fix is the committed `.npmrc` (`legacy-peer-deps=true`). If this recurs: confirm `.npmrc` exists at project root and reproduce locally with a clean `npm ci`. Fetch build logs fast — `npx eas-cli build:view <id>` returns signed log URLs that expire in ~15 min.
