@@ -3,6 +3,7 @@ export interface SearchResult {
   title: string;
   originalTitle: string | null;
   author: string;
+  exactIsbnMatch: boolean;
   editionKey: string | null;
   isbn: string | null;
   publisher: string | null;
@@ -11,6 +12,38 @@ export interface SearchResult {
   coverUrl: string | null;
   pages: number | null;
   year: number | null;
+}
+
+function compactIsbn(value: string): string {
+  return value
+    .trim()
+    .replace(/^ISBN(?:-1[03])?:?\s*/i, '')
+    .replace(/[\s-]/g, '')
+    .toUpperCase();
+}
+
+export function looksLikeIsbn(value: string): boolean {
+  const compact = compactIsbn(value);
+  return (compact.length === 10 || compact.length === 13) && /^[0-9X]+$/.test(compact);
+}
+
+export function normalizeIsbn(value: string): string | null {
+  const compact = compactIsbn(value);
+  if (/^\d{9}[\dX]$/.test(compact)) {
+    const total = [...compact].reduce((sum, digit, index) => {
+      const valueAtPosition = digit === 'X' ? 10 : Number(digit);
+      return sum + valueAtPosition * (10 - index);
+    }, 0);
+    return total % 11 === 0 ? compact : null;
+  }
+  if (/^\d{13}$/.test(compact)) {
+    const total = [...compact].reduce(
+      (sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 1 : 3),
+      0
+    );
+    return total % 10 === 0 ? compact : null;
+  }
+  return null;
 }
 
 // Open Library descriptions sometimes contain Markdown links added by users.
@@ -43,12 +76,21 @@ export interface OpenLibrarySearchDoc {
   };
 }
 
-export function mapOpenLibraryDoc(d: OpenLibrarySearchDoc): SearchResult {
+export function mapOpenLibraryDoc(
+  d: OpenLibrarySearchDoc,
+  exactIsbn: string | null = null
+): SearchResult {
   // `lang=en` influences the single nested edition selected by Open
   // Library without excluding works that only match another language.
   // Keep the Work key as identity, but display the selected edition's
   // metadata when present (especially important for translated classics).
-  const edition = d.editions?.docs?.[0];
+  const editions = d.editions?.docs ?? [];
+  const matchingEdition = exactIsbn
+    ? editions.find((candidate) =>
+        candidate.isbn?.some((isbn) => compactIsbn(isbn) === exactIsbn)
+      )
+    : undefined;
+  const edition = matchingEdition ?? editions[0];
   const preferredTitle = edition?.title?.trim() || d.title;
   const originalTitle =
     preferredTitle.localeCompare(d.title, undefined, { sensitivity: 'base' }) === 0
@@ -60,8 +102,12 @@ export function mapOpenLibraryDoc(d: OpenLibrarySearchDoc): SearchResult {
     title: preferredTitle,
     originalTitle,
     author: d.author_name?.join(', ') ?? 'Unknown author',
+    exactIsbnMatch: matchingEdition !== undefined,
     editionKey: edition?.key ?? null,
-    isbn: edition?.isbn?.[0] ?? null,
+    isbn:
+      (exactIsbn
+        ? edition?.isbn?.find((isbn) => compactIsbn(isbn) === exactIsbn)
+        : edition?.isbn?.[0]) ?? null,
     publisher: edition?.publisher?.[0] ?? null,
     publishDate: edition?.publish_date?.[0] ?? null,
     language: edition?.language?.[0] ?? null,
@@ -72,7 +118,17 @@ export function mapOpenLibraryDoc(d: OpenLibrarySearchDoc): SearchResult {
 }
 
 export function coverUrl(coverId: number, size: 'S' | 'M' | 'L' = 'M'): string {
-  return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg`;
+  return `https://covers.openlibrary.org/b/id/${coverId}-${size}.jpg?default=false`;
+}
+
+export function coverRequestUrl(url: string): string {
+  if (
+    !url.startsWith('https://covers.openlibrary.org/') ||
+    /[?&]default=/.test(url)
+  ) {
+    return url;
+  }
+  return `${url}${url.includes('?') ? '&' : '?'}default=false`;
 }
 
 // A dead network must produce an error the UI can show, not a spinner that
@@ -109,10 +165,12 @@ export async function fetchDescription(olKey: string): Promise<string | null> {
 }
 
 export async function searchBooks(query: string): Promise<SearchResult[]> {
+  const exactIsbn = normalizeIsbn(query);
+  const queryPart = exactIsbn
+    ? `isbn=${encodeURIComponent(exactIsbn)}`
+    : `q=${encodeURIComponent(query)}&lang=en`;
   const url =
-    'https://openlibrary.org/search.json?q=' +
-    encodeURIComponent(query) +
-    '&lang=en' +
+    `https://openlibrary.org/search.json?${queryPart}` +
     '&fields=key,title,author_name,cover_i,number_of_pages_median,first_publish_year,' +
     'editions,editions.key,editions.title,editions.language,editions.isbn,' +
     'editions.publisher,editions.publish_date,editions.cover_i,editions.number_of_pages' +
@@ -120,5 +178,6 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`Open Library returned ${res.status}`);
   const json = (await res.json()) as { docs: OpenLibrarySearchDoc[] };
-  return json.docs.map(mapOpenLibraryDoc);
+  const results = json.docs.map((doc) => mapOpenLibraryDoc(doc, exactIsbn));
+  return exactIsbn ? results.filter((result) => result.exactIsbnMatch) : results;
 }

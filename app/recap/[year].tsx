@@ -1,9 +1,9 @@
-import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
+import { BookCover } from '../../components/BookCover';
 import { notify } from '../../lib/alert';
 import { getAllReadingHistory, getAllSessions } from '../../lib/db';
 import { formatDateShort, plural } from '../../lib/format';
@@ -68,13 +68,7 @@ function HighlightRow({ label, book, note }: { label: string; book: Book; note: 
         accessibilityLabel={`${label}: ${book.title}, ${note}`}
         accessibilityHint="Opens book details"
       >
-        {book.coverUrl ? (
-          <Image source={{ uri: book.coverUrl }} style={styles.highlightCover} contentFit="cover" />
-        ) : (
-          <View style={[styles.highlightCover, styles.placeholder]}>
-            <Text style={styles.placeholderText}>📖</Text>
-          </View>
-        )}
+        <BookCover uri={book.coverUrl} title={book.title} style={styles.highlightCover} />
         <View style={{ flex: 1, marginLeft: 12, justifyContent: 'center' }}>
           <Text style={styles.highlightLabel}>{label}</Text>
           <Text style={styles.highlightTitle} numberOfLines={2}>
@@ -473,8 +467,6 @@ const styles = StyleSheet.create({
   },
   highlightTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginTop: 2 },
   highlightNote: { color: colors.orange, fontSize: 13, fontWeight: '600', marginTop: 4 },
-  placeholder: { alignItems: 'center', justifyContent: 'center' },
-  placeholderText: { fontSize: 20 },
   subheading: {
     color: colors.textDim,
     fontSize: 13,

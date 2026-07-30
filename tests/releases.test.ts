@@ -46,3 +46,20 @@ test('app, package, and release-note versions stay synchronized', () => {
   assert.equal(packageLock.version, CURRENT_RELEASE.id);
   assert.equal(packageLock.packages[''].version, CURRENT_RELEASE.id);
 });
+
+test('PWA policies allow Open Library cover redirects through Archive.org', () => {
+  for (const configPath of ['vercel.json', 'serve.json']) {
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      headers: { headers: { key: string; value: string }[] }[];
+    };
+    const csp = config.headers[0].headers.find(
+      (header) => header.key === 'Content-Security-Policy'
+    )?.value;
+    assert.ok(csp);
+    assert.match(csp, /img-src[^;]*https:\/\/\*\.archive\.org/);
+    assert.match(csp, /connect-src[^;]*https:\/\/\*\.archive\.org/);
+  }
+
+  const postbuild = readFileSync('scripts/postbuild-web.js', 'utf8');
+  assert.match(postbuild, /url\.hostname\.endsWith\('\.archive\.org'\)/);
+});

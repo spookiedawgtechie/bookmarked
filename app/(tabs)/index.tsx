@@ -1,5 +1,4 @@
 import Slider from '@expo/ui/community/slider';
-import { Image } from 'expo-image';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
@@ -12,6 +11,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { BookCover } from '../../components/BookCover';
 import { notify } from '../../lib/alert';
 import { getAllBooks, getAllReadingHistory, getAllSessions, logProgress } from '../../lib/db';
 import { latestCompletedByBook } from '../../lib/readings';
@@ -69,19 +69,13 @@ function CoverThumb({
         }`}
         accessibilityHint="Opens book details"
       >
-        {book.coverUrl ? (
-          <Image
-            source={{ uri: book.coverUrl }}
-            style={[styles.thumb, coverSize]}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={[styles.thumb, styles.thumbPlaceholder, coverSize]}>
-            <Text style={styles.thumbPlaceholderText} numberOfLines={4}>
-              {book.title}
-            </Text>
-          </View>
-        )}
+        <BookCover
+          uri={book.coverUrl}
+          title={book.title}
+          style={[styles.thumb, coverSize]}
+          showTitleFallback
+          fallbackTextStyle={styles.thumbPlaceholderText}
+        />
         {showRating && book.rating !== null && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{book.rating}</Text>
@@ -112,15 +106,13 @@ function HeroCard({
       }`}
       accessibilityHint="Opens book details"
     >
-      {book.coverUrl ? (
-        <Image source={{ uri: book.coverUrl }} style={styles.heroCover} contentFit="cover" />
-      ) : (
-        <View style={[styles.heroCover, styles.thumbPlaceholder]}>
-          <Text style={styles.thumbPlaceholderText} numberOfLines={5}>
-            {book.title}
-          </Text>
-        </View>
-      )}
+      <BookCover
+        uri={book.coverUrl}
+        title={book.title}
+        style={styles.heroCover}
+        showTitleFallback
+        fallbackTextStyle={styles.thumbPlaceholderText}
+      />
       <View style={styles.heroBody}>
         <Text style={styles.heroTitle} numberOfLines={2}>
           {book.title}
@@ -457,13 +449,6 @@ const styles = StyleSheet.create({
   thumb: {
     borderRadius: 6,
     backgroundColor: colors.card,
-  },
-  thumbPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   thumbPlaceholderText: {
     color: colors.textDim,

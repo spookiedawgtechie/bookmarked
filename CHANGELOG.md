@@ -2,6 +2,20 @@
 
 All notable user-facing changes to Bookmarked are recorded here.
 
+## 2.0.1 — 2026-07-30
+
+### Physical editions
+
+- Added automatic ISBN-10 and ISBN-13 detection, checksum validation, and exact-edition Open Library search.
+- Added a safe “Use edition” action for books already in the library.
+- Preserved edited titles, manual page counts, notes, progress, ratings, reviews, and reading dates when updating edition metadata.
+
+### Cover reliability
+
+- Allowed Open Library’s Archive.org cover redirects in local and production PWA security policies.
+- Added a shared cover renderer with explicit missing-cover requests and readable fallbacks when an image fails.
+- Applied consistent cover handling across Shelf, Search, lists, details, alternate covers, and recap highlights.
+
 ## 2.0.0 — 2026-07-24
 
 ### Library and reading history

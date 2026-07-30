@@ -1,5 +1,4 @@
 import Slider from '@expo/ui/community/slider';
-import { Image } from 'expo-image';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +15,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { BookCover } from '../../components/BookCover';
 import {
   deleteBook,
   correctCompletedReadingToWant,
@@ -387,17 +387,11 @@ export default function BookDetail() {
             accessibilityLabel={`Change cover for ${book.title}`}
             accessibilityHint="Opens alternate covers from Open Library"
           >
-            {book.coverUrl ? (
-              <Image
-                source={{ uri: book.coverUrl.replace('-M.jpg', '-L.jpg') }}
-                style={styles.cover}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.cover, styles.coverPlaceholder]}>
-                <Text style={{ fontSize: 40 }}>📖</Text>
-              </View>
-            )}
+            <BookCover
+              uri={book.coverUrl ? book.coverUrl.replace('-M.jpg', '-L.jpg') : null}
+              title={book.title}
+              style={styles.cover}
+            />
             <Text style={styles.coverHint}>Tap to change</Text>
           </Pressable>
           <View style={styles.headerText}>
@@ -821,10 +815,10 @@ export default function BookDetail() {
                     accessibilityRole="button"
                     accessibilityLabel={`Use alternate cover ${index + 1}`}
                   >
-                    <Image
-                      source={{ uri: coverUrl(id, 'M') }}
+                    <BookCover
+                      uri={coverUrl(id, 'M')}
+                      title={`Alternate cover ${index + 1}`}
                       style={styles.pickerCover}
-                      contentFit="cover"
                     />
                   </Pressable>
                 ))}
@@ -842,7 +836,6 @@ const styles = StyleSheet.create({
   pageContent: { padding: 16, paddingBottom: 48 },
   header: { flexDirection: 'row', marginBottom: 20 },
   cover: { width: 100, height: 150, borderRadius: 8, backgroundColor: colors.border },
-  coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   coverHint: {
     color: colors.textDim,
     fontSize: 12,

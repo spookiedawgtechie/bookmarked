@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SQLiteDatabase, SQLiteRunResult } from 'expo-sqlite';
-import { logProgress, setStatus } from '../lib/db';
+import {
+  addBook,
+  applyEditionMetadata,
+  getAllBooks,
+  getBook,
+  logProgress,
+  migrate,
+  setNotes,
+  setRating,
+  setReview,
+  setStatus,
+  setTitle,
+  setTotalPages,
+} from '../lib/db';
+import { NodeSQLiteAdapter } from './sqlite';
 
 interface Operation {
   sql: string;
@@ -84,4 +98,57 @@ test('directly marking an old book read does not invent a session dated today', 
   assert.equal(fake.committed.length, 1);
   assert.match(fake.committed[0].sql, /UPDATE reading_entries SET status/);
   assert.equal(fake.committed[0].sql.includes('sessions'), false);
+});
+
+test('using an exact ISBN edition preserves personal and reading data', async () => {
+  const adapter = new NodeSQLiteAdapter();
+  const db = adapter.asDatabase();
+  await migrate(db);
+  await addBook(db, {
+    olKey: '/works/OL17802920W',
+    title: 'Leonardo da Vinci',
+    author: 'Walter Isaacson',
+    coverUrl: 'https://covers.openlibrary.org/b/id/1-M.jpg',
+    totalPages: 599,
+    editionKey: '/books/OLD',
+    isbn: '0000000000',
+    publisher: 'Old publisher',
+    publishDate: 'Old date',
+    language: 'spa',
+  });
+  const [created] = await getAllBooks(db);
+  await setTitle(db, created.id, 'My Leonardo copy');
+  await setTotalPages(db, created.id, 624);
+  await setNotes(db, created.id, 'Signed copy');
+  await setStatus(db, created.id, 'reading');
+  await logProgress(db, created.id, 0, 190);
+  await setRating(db, created.id, 8.5);
+  await setReview(db, created.id, 'Excellent so far');
+
+  await applyEditionMetadata(db, created.id, {
+    editionKey: '/books/OL27102596M',
+    isbn: '9781501139154',
+    publisher: 'Simon & Schuster',
+    publishDate: '2017',
+    language: 'eng',
+    coverUrl: 'https://covers.openlibrary.org/b/id/8740542-M.jpg?default=false',
+    totalPages: 568,
+  });
+
+  const updated = await getBook(db, created.id);
+  assert.ok(updated);
+  assert.equal(updated.title, 'My Leonardo copy');
+  assert.equal(updated.totalPages, 624);
+  assert.equal(updated.notes, 'Signed copy');
+  assert.equal(updated.currentPage, 190);
+  assert.equal(updated.rating, 8.5);
+  assert.equal(updated.review, 'Excellent so far');
+  assert.equal(updated.editionKey, '/books/OL27102596M');
+  assert.equal(updated.isbn, '9781501139154');
+  assert.equal(updated.publisher, 'Simon & Schuster');
+  assert.equal(updated.language, 'eng');
+  assert.equal(
+    updated.coverUrl,
+    'https://covers.openlibrary.org/b/id/8740542-M.jpg?default=false'
+  );
 });

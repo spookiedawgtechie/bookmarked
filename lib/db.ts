@@ -399,6 +399,16 @@ export async function getOwnedOlKeys(db: SQLiteDatabase): Promise<string[]> {
   return rows.map((row) => row.ol_key);
 }
 
+export async function getOwnedWorkItems(
+  db: SQLiteDatabase
+): Promise<{ olKey: string; itemId: number }[]> {
+  const rows = await db.getAllAsync<{ ol_key: string; item_id: number }>(
+    `SELECT works.ol_key, library_items.id AS item_id
+     FROM works JOIN library_items ON library_items.work_id = works.id`
+  );
+  return rows.map((row) => ({ olKey: row.ol_key, itemId: row.item_id }));
+}
+
 export async function getAllSessions(db: SQLiteDatabase): Promise<ReadingSession[]> {
   const rows = await db.getAllAsync<Record<string, unknown>>(
     `SELECT sessions.id, sessions.reading_entry_id AS reading_id,
@@ -624,6 +634,40 @@ export async function logProgress(
 export async function setCoverUrl(db: SQLiteDatabase, id: number, coverUrl: string): Promise<void> {
   const now = new Date().toISOString();
   await db.runAsync('UPDATE library_items SET cover_url = ?, updated_at = ? WHERE id = ?', coverUrl, now, id);
+}
+
+export async function applyEditionMetadata(
+  db: SQLiteDatabase,
+  id: number,
+  edition: {
+    editionKey: string | null;
+    isbn: string | null;
+    publisher: string | null;
+    publishDate: string | null;
+    language: string | null;
+    coverUrl: string | null;
+    totalPages: number | null;
+  }
+): Promise<void> {
+  const now = new Date().toISOString();
+  const result = await db.runAsync(
+    `UPDATE library_items
+     SET edition_key = ?, isbn = ?, publisher = ?, publish_date = ?, language = ?,
+         cover_url = COALESCE(?, cover_url),
+         total_pages = COALESCE(total_pages, ?),
+         updated_at = ?
+     WHERE id = ?`,
+    edition.editionKey,
+    edition.isbn,
+    edition.publisher,
+    edition.publishDate,
+    edition.language,
+    edition.coverUrl,
+    edition.totalPages,
+    now,
+    id
+  );
+  if (result.changes === 0) throw new Error('Library item not found');
 }
 
 export async function setTitle(db: SQLiteDatabase, id: number, title: string): Promise<void> {

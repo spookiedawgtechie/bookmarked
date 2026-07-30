@@ -13,34 +13,24 @@ export type AppRelease = {
 export const LAST_SEEN_RELEASE_KEY = 'last_seen_release';
 
 export const CURRENT_RELEASE: AppRelease = {
-  id: '2.0.0',
-  title: 'Bookmarked 2.0',
-  releasedAt: '2026-07-24',
+  id: '2.0.1',
+  title: 'Bookmarked 2.0.1',
+  releasedAt: '2026-07-30',
   notes: [
     {
-      title: 'Your physical library, properly modelled',
+      title: 'Find the exact physical edition',
       detail:
-        'Books now retain edition details, ownership, editable titles, private notes, and the cover that matches your copy.',
+        'Type an ISBN-10 or ISBN-13 into Search to find the matching edition, cover, publisher, language, and publication date.',
     },
     {
-      title: 'Rereads preserve history',
+      title: 'Repair an existing copy safely',
       detail:
-        'Starting a book again creates a new reading entry instead of replacing the original rating, review, dates, or recap.',
+        'Use an exact ISBN edition without replacing your edited title, page count, notes, progress, ratings, reviews, or reading dates.',
     },
     {
-      title: 'Progress and backups are safer',
+      title: 'Covers fail gracefully',
       detail:
-        'Page sessions save atomically, legacy backups import cleanly, and merges keep the newer copy while respecting deletions.',
-    },
-    {
-      title: 'Richer stats and recaps',
-      detail:
-        'Track streaks, weekly pace, monthly pages, quarters, heatmaps, fastest and longest reads, and share recap images.',
-    },
-    {
-      title: 'Better on phones and the web',
-      detail:
-        'Lists have sorting and filters, accessibility is improved, and the PWA now uses a focused responsive desktop layout.',
+        'The PWA now permits Open Library’s real cover redirects, and failed images show a readable fallback instead of an empty block.',
     },
   ],
 };

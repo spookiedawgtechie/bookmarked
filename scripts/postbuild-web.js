@@ -102,7 +102,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.hostname === 'openlibrary.org' || url.hostname === 'covers.openlibrary.org') {
+  if (
+    url.hostname === 'openlibrary.org' ||
+    url.hostname === 'covers.openlibrary.org' ||
+    url.hostname === 'archive.org' ||
+    url.hostname.endsWith('.archive.org')
+  ) {
     event.respondWith(
       fetch(request)
         .then((response) => {

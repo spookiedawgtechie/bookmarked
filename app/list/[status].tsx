@@ -1,9 +1,9 @@
-import { Image } from 'expo-image';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { BookCover } from '../../components/BookCover';
 import { getAllBooks, getAllReadingHistory } from '../../lib/db';
 import { latestCompletedByBook } from '../../lib/readings';
 import {
@@ -143,19 +143,13 @@ export default function StatusList() {
                 }`}
                 accessibilityHint="Opens book details"
               >
-                {b.coverUrl ? (
-                  <Image
-                    source={{ uri: b.coverUrl }}
-                    style={[styles.cover, coverSize]}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <View style={[styles.cover, styles.placeholder, coverSize]}>
-                    <Text style={styles.placeholderText} numberOfLines={4}>
-                      {b.title}
-                    </Text>
-                  </View>
-                )}
+                <BookCover
+                  uri={b.coverUrl}
+                  title={b.title}
+                  style={[styles.cover, coverSize]}
+                  showTitleFallback
+                  fallbackTextStyle={styles.placeholderText}
+                />
                 {b.status === 'read' && b.rating !== null && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{b.rating}</Text>
@@ -205,13 +199,6 @@ const styles = StyleSheet.create({
   cover: {
     borderRadius: 6,
     backgroundColor: colors.card,
-  },
-  placeholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   placeholderText: {
     color: colors.textDim,
