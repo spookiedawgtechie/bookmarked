@@ -17,6 +17,7 @@ type BookCoverProps = Omit<ImageProps, 'source' | 'style' | 'onError'> & {
   style: StyleProp<ImageStyle>;
   showTitleFallback?: boolean;
   fallbackTextStyle?: StyleProp<TextStyle>;
+  onSettled?: () => void;
 };
 
 export function BookCover({
@@ -25,6 +26,7 @@ export function BookCover({
   style,
   showTitleFallback = false,
   fallbackTextStyle,
+  onSettled,
   ...imageProps
 }: BookCoverProps) {
   const styles = useThemedStyles(createStyles);
@@ -33,7 +35,8 @@ export function BookCover({
 
   useEffect(() => {
     setFailedUri(null);
-  }, [requestUri]);
+    if (!requestUri) onSettled?.();
+  }, [requestUri, onSettled]);
 
   if (!requestUri || failedUri === requestUri) {
     return (
@@ -56,7 +59,14 @@ export function BookCover({
       contentFit={imageProps.contentFit ?? 'cover'}
       cachePolicy={imageProps.cachePolicy ?? 'memory-disk'}
       recyclingKey={requestUri}
-      onError={() => setFailedUri(requestUri)}
+      onLoad={(event) => {
+        imageProps.onLoad?.(event);
+        onSettled?.();
+      }}
+      onError={() => {
+        setFailedUri(requestUri);
+        onSettled?.();
+      }}
     />
   );
 }

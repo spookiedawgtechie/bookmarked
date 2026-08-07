@@ -1,6 +1,6 @@
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -157,9 +157,18 @@ export default function Recap() {
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [recapName, setRecapName] = useState('');
+  const [settledShareCovers, setSettledShareCovers] = useState<Set<number>>(new Set());
   const shareCardRef = useRef<View>(null);
   const heatmapScrollRef = useRef<ScrollView>(null);
   const coverMetrics = recapCoverMetrics(windowWidth);
+  const markShareCoverSettled = useCallback((readingId: number) => {
+    setSettledShareCovers((current) => {
+      if (current.has(readingId)) return current;
+      const next = new Set(current);
+      next.add(readingId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -262,9 +271,19 @@ export default function Recap() {
     : 'No page sessions logged';
   const shareBooks = books.slice(-SHARE_COVER_LIMIT);
   const extraShareBooks = Math.max(0, books.length - shareBooks.length);
+  const shareCoversReady = shareBooks.every((book) =>
+    settledShareCovers.has(book.readingId)
+  );
 
   async function handleShare() {
+    if (!shareCoversReady) {
+      notify('Poster is still preparing', 'Wait a moment for the book covers to finish loading.');
+      return;
+    }
     try {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Platform.OS === 'web' ? 150 : 300)
+      );
       const capture = await captureRef(shareCardRef, {
         format: 'png',
         quality: 1,
@@ -546,6 +565,7 @@ export default function Recap() {
                     style={styles.posterCover}
                     showTitleFallback
                     fallbackTextStyle={styles.posterFallback}
+                    onSettled={() => markShareCoverSettled(book.readingId)}
                   />
                 ))}
               </View>
@@ -554,19 +574,64 @@ export default function Recap() {
               )}
               <View style={styles.posterBest}>
                 <Text style={styles.posterBestLabel}>BIGGEST READING DAY</Text>
-                <Text style={styles.posterBestValue}>{bestDayText}</Text>
+                <Text style={styles.posterBestValue}>
+                  {bestDay
+                    ? formatDateShort(`${bestDay[0]}T12:00:00.000Z`)
+                    : 'No page sessions logged'}
+                </Text>
+                {bestDay && (
+                  <Text style={styles.posterBestPages}>
+                    {plural(bestDay[1], 'page')} read
+                  </Text>
+                )}
+                {(bestReading?.dates.length ?? 0) > 1 && (
+                  <Text style={styles.posterBestTie}>
+                    Tied across {bestReading!.dates.length} days
+                  </Text>
+                )}
               </View>
-              <Text style={styles.posterFooter}>
-                {topRated ? `Top rated: ${topRated.title}` : 'A year kept in books.'}
-              </Text>
+              {(topRated || fastest) && (
+                <View style={styles.posterHighlights}>
+                  {topRated && (
+                    <View style={styles.posterHighlight}>
+                      <Text style={styles.posterHighlightLabel}>HIGHEST RATED</Text>
+                      <Text style={styles.posterHighlightTitle} numberOfLines={2}>
+                        {topRated.title}
+                      </Text>
+                      <Text style={styles.posterHighlightNote}>
+                        ★ {topRated.rating}/10
+                      </Text>
+                    </View>
+                  )}
+                  {fastest && (
+                    <View style={styles.posterHighlight}>
+                      <Text style={styles.posterHighlightLabel}>FASTEST READ</Text>
+                      <Text style={styles.posterHighlightTitle} numberOfLines={2}>
+                        {fastest.title}
+                      </Text>
+                      <Text style={styles.posterHighlightNote}>
+                        {plural(
+                          daysBetween(fastest.startedAt!, fastest.finishedAt!),
+                          'day'
+                        )}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              <Text style={styles.posterFooter}>A year kept in books.</Text>
             </View>
             <Pressable
-              style={styles.shareButton}
+              style={[styles.shareButton, !shareCoversReady && styles.shareButtonDisabled]}
               onPress={handleShare}
+              disabled={!shareCoversReady}
               accessibilityRole="button"
               accessibilityLabel={`Share ${selectedYear} reading recap as an image`}
+              accessibilityState={{ disabled: !shareCoversReady }}
             >
-              <Text style={styles.shareButtonText}>Share {selectedYear} poster</Text>
+              <Text style={styles.shareButtonText}>
+                {shareCoversReady ? `Share ${selectedYear} poster` : 'Preparing covers…'}
+              </Text>
             </Pressable>
           </>
         )}
@@ -679,8 +744,24 @@ const createStyles = (colors: ThemeColors) => ({
   posterBest: { backgroundColor: colors.primaryContainer, borderRadius: 12, padding: 12, marginTop: 14 },
   posterBestLabel: { color: colors.primary, fontSize: 9, fontWeight: '800' as const, letterSpacing: 1 },
   posterBestValue: { color: colors.text, fontSize: 13, fontWeight: '700' as const, marginTop: 3 },
+  posterBestPages: { color: colors.primary, fontSize: 17, fontWeight: '900' as const, marginTop: 3 },
+  posterBestTie: { color: colors.textDim, fontSize: 10, marginTop: 3 },
+  posterHighlights: { flexDirection: 'row' as const, gap: 8, marginTop: 9 },
+  posterHighlight: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 11,
+    padding: 10,
+  },
+  posterHighlightLabel: { color: colors.primary, fontSize: 8, fontWeight: '800' as const, letterSpacing: 0.8 },
+  posterHighlightTitle: { color: colors.text, fontSize: 11, lineHeight: 14, fontWeight: '700' as const, marginTop: 4 },
+  posterHighlightNote: { color: colors.tertiary, fontSize: 10, fontWeight: '800' as const, marginTop: 4 },
   posterFooter: { color: colors.textDim, fontSize: 11, marginTop: 13 },
   shareButton: { minHeight: 50, backgroundColor: colors.primary, borderRadius: 11, alignItems: 'center' as const, justifyContent: 'center' as const, marginTop: 12 },
+  shareButtonDisabled: { opacity: 0.55 },
   shareButtonText: { color: colors.onAccent, fontSize: 15, fontWeight: '800' as const },
   emptyText: { color: colors.textDim, fontSize: 14, textAlign: 'center' as const, marginTop: 48 },
 });

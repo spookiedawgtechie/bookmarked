@@ -16,7 +16,13 @@ All notable user-facing changes to Bookmarked are recorded here.
 - Promoted the biggest reading day, with tied days preserved, and reorganized monthly, quarterly, heatmap, and pace analytics.
 - Moved Top rated, Fastest, and Longest into compact secondary highlights.
 - Added an optional Recap name and a dedicated celebratory share poster capped at 12 covers plus a remaining count.
+- Added highest-rated, fastest-read, and biggest-reading-day details to the poster, and wait for its covers before capture.
 - Included the Recap name in backup keep-newer merging without exporting visual preferences.
+
+### Settings and backup
+
+- Moved Personalise above Backup in Stats.
+- Renamed export to Share backup file to reflect the native and supported-mobile-browser share sheet behavior.
 
 ### First-run guide
 

@@ -128,6 +128,9 @@ export default function Stats() {
         </>
       )}
 
+      <Text style={styles.subheading}>Personalise</Text>
+      <PersonalizationSettings refreshToken={settingsRefresh} />
+
       <Text style={styles.subheading}>Backup</Text>
       <Pressable
         style={styles.recapRow}
@@ -137,10 +140,10 @@ export default function Stats() {
           )
         }
         accessibilityRole="button"
-        accessibilityLabel="Export library backup as JSON"
+        accessibilityLabel="Share library backup as a JSON file"
       >
-        <Text style={styles.recapRowText}>Export library as JSON</Text>
-        <Text style={styles.recapRowArrow}>↓</Text>
+        <Text style={styles.recapRowText}>Share backup file</Text>
+        <Text style={styles.recapRowArrow}>↗</Text>
       </Pressable>
       <Pressable
         style={styles.recapRow}
@@ -179,9 +182,6 @@ export default function Stats() {
         <Text style={styles.recapRowText}>Import library from JSON</Text>
         <Text style={styles.recapRowArrow}>↑</Text>
       </Pressable>
-
-      <Text style={styles.subheading}>Personalise</Text>
-      <PersonalizationSettings refreshToken={settingsRefresh} />
 
       <Text style={styles.subheading}>About</Text>
       <Pressable
