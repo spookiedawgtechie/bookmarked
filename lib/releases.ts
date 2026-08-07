@@ -13,24 +13,29 @@ export type AppRelease = {
 export const LAST_SEEN_RELEASE_KEY = 'last_seen_release';
 
 export const CURRENT_RELEASE: AppRelease = {
-  id: '2.0.1',
-  title: 'Bookmarked 2.0.1',
-  releasedAt: '2026-07-30',
+  id: '2.1.0',
+  title: 'Bookmarked 2.1.0',
+  releasedAt: '2026-08-07',
   notes: [
     {
-      title: 'Find the exact physical edition',
+      title: 'Make Bookmarked yours',
       detail:
-        'Type an ISBN-10 or ISBN-13 into Search to find the matching edition, cover, publisher, language, and publication date.',
+        'Choose from five Monet-inspired palettes, System, Light, tinted Dark, or pure-black AMOLED appearance, and add your Recap name.',
     },
     {
-      title: 'Repair an existing copy safely',
+      title: 'A richer reading recap',
       detail:
-        'Use an exact ISBN edition without replacing your edited title, page count, notes, progress, ratings, reviews, or reading dates.',
+        'See every book you finished, reading activity and highlights, then share a celebratory poster with covers and standout moments.',
     },
     {
-      title: 'Covers fail gracefully',
+      title: 'Track every physical copy',
       detail:
-        'The PWA now permits Open Library’s real cover redirects, and failed images show a readable fallback instead of an empty block.',
+        'Keep multiple editions or duplicate copies of one work, each with its own ownership, metadata, notes, progress, and reading history.',
+    },
+    {
+      title: 'A clearer first run and backup',
+      detail:
+        'New readers get a short introduction, while Personalise and the shareable backup file are easier to find in Stats.',
     },
   ],
 };
