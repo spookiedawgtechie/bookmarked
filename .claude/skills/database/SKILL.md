@@ -68,7 +68,7 @@ Deleting a physical copy writes a `library_item` tombstone and cascades its read
 - Rating/review/status/progress/finish date update `reading_entries.updated_at`.
 - Title/edition/copy metadata/ownership/cover/pages/notes update `library_items.updated_at`.
 - Description updates `works.updated_at`. Complete timestamps are required for backup keep-newer semantics.
-- `addBook()` is transactional. Search has an immediate ref-backed repeated-tap guard; it intentionally prevents a second item for the same Work until a dedicated multi-copy/edition picker is added.
+- `addBook()` is transactional and remains idempotent for the first copy of a Work. `addBookCopy()` deliberately creates another physical item and its own first reading entry for the same Work. Search groups every existing item by Work, uses the immediate ref-backed repeated-tap guard for both paths, and opens the physical-copy sheet before adding another copy or applying an exact ISBN edition to a selected existing copy.
 - Always parameterize values. Never interpolate user/API/backup data into SQL.
 
 ## Stats semantics

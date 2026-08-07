@@ -399,14 +399,37 @@ export async function getOwnedOlKeys(db: SQLiteDatabase): Promise<string[]> {
   return rows.map((row) => row.ol_key);
 }
 
-export async function getOwnedWorkItems(
-  db: SQLiteDatabase
-): Promise<{ olKey: string; itemId: number }[]> {
-  const rows = await db.getAllAsync<{ ol_key: string; item_id: number }>(
-    `SELECT works.ol_key, library_items.id AS item_id
-     FROM works JOIN library_items ON library_items.work_id = works.id`
+export interface OwnedWorkItem {
+  olKey: string;
+  itemId: number;
+  title: string;
+  isbn: string | null;
+  editionKey: string | null;
+  coverUrl: string | null;
+}
+
+export async function getOwnedWorkItems(db: SQLiteDatabase): Promise<OwnedWorkItem[]> {
+  const rows = await db.getAllAsync<{
+    ol_key: string;
+    item_id: number;
+    title: string;
+    isbn: string | null;
+    edition_key: string | null;
+    cover_url: string | null;
+  }>(
+    `SELECT works.ol_key, library_items.id AS item_id, library_items.title,
+            library_items.isbn, library_items.edition_key, library_items.cover_url
+     FROM works JOIN library_items ON library_items.work_id = works.id
+     ORDER BY library_items.added_at ASC, library_items.id ASC`
   );
-  return rows.map((row) => ({ olKey: row.ol_key, itemId: row.item_id }));
+  return rows.map((row) => ({
+    olKey: row.ol_key,
+    itemId: row.item_id,
+    title: row.title,
+    isbn: row.isbn,
+    editionKey: row.edition_key,
+    coverUrl: row.cover_url,
+  }));
 }
 
 export async function getAllSessions(db: SQLiteDatabase): Promise<ReadingSession[]> {
@@ -434,74 +457,103 @@ export async function getBook(db: SQLiteDatabase, id: number): Promise<Book | nu
   return row ? rowToBook(row) : null;
 }
 
-export async function addBook(
+export interface AddBookInput {
+  olKey: string;
+  title: string;
+  author: string;
+  coverUrl: string | null;
+  totalPages: number | null;
+  editionKey: string | null;
+  isbn: string | null;
+  publisher: string | null;
+  publishDate: string | null;
+  language: string | null;
+}
+
+async function insertLibraryItem(
   db: SQLiteDatabase,
-  input: {
-    olKey: string;
-    title: string;
-    author: string;
-    coverUrl: string | null;
-    totalPages: number | null;
-    editionKey: string | null;
-    isbn: string | null;
-    publisher: string | null;
-    publishDate: string | null;
-    language: string | null;
-  }
+  workId: number,
+  input: AddBookInput,
+  now: string
 ): Promise<void> {
+  const itemUid = createUid('item');
+  await db.runAsync(
+    `INSERT INTO library_items
+       (uid, work_id, title, ownership, edition_key, isbn, publisher, publish_date,
+        language, cover_url, total_pages, notes, added_at, updated_at)
+     VALUES (?, ?, ?, 'wishlist', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+    itemUid,
+    workId,
+    input.title,
+    input.editionKey,
+    input.isbn,
+    input.publisher,
+    input.publishDate,
+    input.language,
+    input.coverUrl,
+    input.totalPages,
+    now,
+    now
+  );
+  const item = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM library_items WHERE uid = ?',
+    itemUid
+  );
+  if (!item) throw new Error('Could not create library item');
+  await db.runAsync(
+    `INSERT INTO reading_entries
+       (uid, library_item_id, sequence, status, current_page, rating, review,
+        started_at, finished_at, created_at, updated_at)
+     VALUES (?, ?, 1, 'want', 0, NULL, NULL, NULL, NULL, ?, ?)`,
+    `reading:${itemUid}:1`,
+    item.id,
+    now,
+    now
+  );
+}
+
+async function ensureWork(
+  db: SQLiteDatabase,
+  input: AddBookInput,
+  now: string
+): Promise<number> {
+  await db.runAsync(
+    `INSERT INTO works (uid, ol_key, title, author, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, NULL, ?, ?)
+     ON CONFLICT(ol_key) DO NOTHING`,
+    `work:${input.olKey}`,
+    input.olKey,
+    input.title,
+    input.author,
+    now,
+    now
+  );
+  const work = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM works WHERE ol_key = ?',
+    input.olKey
+  );
+  if (!work) throw new Error('Could not create work');
+  return work.id;
+}
+
+export async function addBook(db: SQLiteDatabase, input: AddBookInput): Promise<void> {
   const now = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `INSERT INTO works (uid, ol_key, title, author, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NULL, ?, ?)
-       ON CONFLICT(ol_key) DO NOTHING`,
-      `work:${input.olKey}`,
-      input.olKey,
-      input.title,
-      input.author,
-      now,
-      now
-    );
+    const workId = await ensureWork(db, input, now);
     const existing = await db.getFirstAsync<{ id: number }>(
-      `SELECT library_items.id FROM library_items
-       JOIN works ON works.id = library_items.work_id
-       WHERE works.ol_key = ? LIMIT 1`,
-      input.olKey
+      'SELECT id FROM library_items WHERE work_id = ? LIMIT 1',
+      workId
     );
     if (existing) return;
-    const work = await db.getFirstAsync<{ id: number }>('SELECT id FROM works WHERE ol_key = ?', input.olKey);
-    if (!work) throw new Error('Could not create work');
-    const itemUid = createUid('item');
-    await db.runAsync(
-      `INSERT INTO library_items
-         (uid, work_id, title, ownership, edition_key, isbn, publisher, publish_date,
-          language, cover_url, total_pages, notes, added_at, updated_at)
-       VALUES (?, ?, ?, 'wishlist', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
-      itemUid,
-      work.id,
-      input.title,
-      input.editionKey,
-      input.isbn,
-      input.publisher,
-      input.publishDate,
-      input.language,
-      input.coverUrl,
-      input.totalPages,
-      now,
-      now
-    );
-    const item = await db.getFirstAsync<{ id: number }>('SELECT id FROM library_items WHERE uid = ?', itemUid);
-    if (!item) throw new Error('Could not create library item');
-    await db.runAsync(
-      `INSERT INTO reading_entries
-         (uid, library_item_id, sequence, status, current_page, rating, review,
-          started_at, finished_at, created_at, updated_at)
-       VALUES (?, ?, 1, 'want', 0, NULL, NULL, NULL, NULL, ?, ?)`,
-      `reading:${itemUid}:1`,
-      item.id,
-      now,
-      now
-    );
+    await insertLibraryItem(db, workId, input, now);
+  });
+}
+
+export async function addBookCopy(db: SQLiteDatabase, input: AddBookInput): Promise<void> {
+  const now = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    const workId = await ensureWork(db, input, now);
+    await insertLibraryItem(db, workId, input, now);
   });
 }
 

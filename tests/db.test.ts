@@ -3,9 +3,11 @@ import test from 'node:test';
 import type { SQLiteDatabase, SQLiteRunResult } from 'expo-sqlite';
 import {
   addBook,
+  addBookCopy,
   applyEditionMetadata,
   getAllBooks,
   getBook,
+  getOwnedWorkItems,
   logProgress,
   migrate,
   setNotes,
@@ -151,4 +153,52 @@ test('using an exact ISBN edition preserves personal and reading data', async ()
     updated.coverUrl,
     'https://covers.openlibrary.org/b/id/8740542-M.jpg?default=false'
   );
+});
+
+test('multiple physical copies share one work but keep independent edition records', async () => {
+  const adapter = new NodeSQLiteAdapter();
+  const db = adapter.asDatabase();
+  await migrate(db);
+
+  const firstCopy = {
+    olKey: '/works/OL45883W',
+    title: 'The Odyssey',
+    author: 'Homer',
+    coverUrl: 'https://covers.openlibrary.org/b/id/1-M.jpg',
+    totalPages: 320,
+    editionKey: '/books/OL1M',
+    isbn: '9780140449112',
+    publisher: 'Penguin Classics',
+    publishDate: '2003',
+    language: 'eng',
+  };
+  await addBook(db, firstCopy);
+  await addBookCopy(db, {
+    ...firstCopy,
+    title: 'The Odyssey: Indian Edition',
+    coverUrl: 'https://covers.openlibrary.org/b/id/2-M.jpg',
+    totalPages: 384,
+    editionKey: '/books/OL2M',
+    isbn: '9789358560426',
+    publisher: 'Fingerprint Publishing',
+    publishDate: '2023',
+  });
+
+  const books = await getAllBooks(db);
+  const ownedItems = await getOwnedWorkItems(db);
+  const workCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM works');
+  const readingCount = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM reading_entries'
+  );
+
+  assert.equal(workCount?.count, 1);
+  assert.equal(books.length, 2);
+  assert.equal(readingCount?.count, 2);
+  assert.deepEqual(
+    books.map((book) => book.isbn).sort(),
+    ['9780140449112', '9789358560426']
+  );
+  assert.equal(new Set(books.map((book) => book.id)).size, 2);
+  assert.equal(ownedItems.length, 2);
+  assert.equal(ownedItems.every((item) => item.olKey === '/works/OL45883W'), true);
 });

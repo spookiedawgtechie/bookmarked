@@ -14,6 +14,7 @@ A personal, local-first book tracker — a Letterboxd for books. Search Open Lib
 - **Yearly recaps** — books finished, pages read, top rated, fastest read, longest read, a month-by-month pages chart, and a GitHub-style reading heatmap — plus a one-tap shareable recap image
 - **Alternate covers** — pick the edition cover that matches your physical copy
 - **Physical-copy ownership & editions** — track owned, wishlisted, or borrowed copies with edition key, ISBN, publisher, publication date, and language when Open Library provides them
+- **Multiple physical copies** — keep separate editions or duplicate copies of the same Work, each with its own cover, ISBN, page count, ownership, notes, and reading history
 - **Rereads** — start a fresh reading at page zero without losing previous ratings, reviews, dates, or recap history
 - **Backdating** — log books you read years ago with a real finish date, so your history stays honest
 - **Backup & restore** — validated backup v3 JSON with portable IDs, transactional import, keep-newer conflict handling, deletion tombstones, and legacy-backup compatibility
@@ -54,7 +55,7 @@ The one-sentence architecture: a React app whose backend is a SQLite file sittin
 
 ## Releases
 
-- **Current release** — Bookmarked 2.0.0. See [CHANGELOG.md](CHANGELOG.md) for the complete user-facing changes.
+- **Current release** — Bookmarked 2.0.1. See [CHANGELOG.md](CHANGELOG.md) for the complete user-facing changes.
 - **Android** — built via `eas build --profile preview`, distributed as a direct-install APK (no Play Store). See `.claude/skills/release-android/SKILL.md`.
 - **Web** — `vercel --prod`, deployed from `.claude/skills/release-pwa/SKILL.md`'s process. Works as an installable PWA (Add to Home Screen on iOS/Android).
 

@@ -2,6 +2,14 @@
 
 All notable user-facing changes to Bookmarked are recorded here.
 
+## Unreleased
+
+### Multiple physical copies
+
+- Added a physical-copy manager when a searched Work is already in the library.
+- Added support for tracking multiple editions or duplicate copies of one Work, each with independent metadata, ownership, notes, reading history, ratings, and reviews.
+- Exact ISBN results can now update a specifically selected existing copy instead of silently targeting an arbitrary copy.
+
 ## 2.0.1 — 2026-07-30
 
 ### Physical editions
