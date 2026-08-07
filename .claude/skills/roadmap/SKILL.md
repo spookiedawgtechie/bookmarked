@@ -14,7 +14,7 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 - Personal, local-first, single-user. **No accounts, no server, no social features, no sync.** The SQLite file on each device is the entire backend.
 - 10-point rating scale, half steps (REAL 0.5–10).
 - Page-number slider for progress (he reads ~90% physical books); percentage is derived, never entered.
-- AMOLED pure-black theme is the identity. A light theme was considered and consciously deferred indefinitely.
+- Personal Monet-style theming is now the identity: five curated palettes with System, Light, tinted Dark, and pure-black AMOLED appearances. True Android wallpaper-derived Dynamic Color remains optional future native work.
 - Dense phone grids with responsive PWA scaling: 4 columns on phones, 5 on tablets/small web, 6 on desktop; library content is capped at 1200px and readable screens at 900px.
 - Distribution: sideloaded APK (Android) + PWA on Vercel (iOS/desktop). No app stores, no paid Apple Developer account.
 
@@ -41,6 +41,14 @@ Tanish Hire — engineer (PLM/CAD automation, React/Next.js background, pursuing
 - Phase B exposes the schema's multi-copy capability in Search: a Work can have multiple independently tracked physical items, and an exact ISBN result can be applied to a specifically selected copy instead of whichever item happened to be queried first.
 - User-supplied gallery covers were removed from the planned roadmap on 2026-08-07; do not introduce image compression, local image storage, or archive backups unless the owner explicitly reopens that decision. A recap-page redesign is the next product discussion after Phase B, not part of Phase B implementation.
 - Predictive back remains an isolated known Android issue: the APK has `predictiveBackGestureEnabled`, but the owner confirmed the gesture still does not work. Treat it as a diagnostic task, not as working behavior.
+
+## Theme, recap, and onboarding update (in development, approved 2026-08-07)
+
+- Five curated palettes: Sage, Ink, Ocean, Plum, Ember. Appearance modes: System, Light, tinted Dark, and pure-black AMOLED. Existing libraries default to Ink + AMOLED; new empty libraries default to Ink + System.
+- The recap is cover-first: every completed reading (including rereads) is prominent, followed by activity analytics and then compact Top rated/Fastest/Longest highlights.
+- Highest-page day comes from session deltas and preserves ties. The analytical page and celebratory share poster are separate compositions; the poster shows at most 12 covers plus a remaining count.
+- `recap_name` is optional, has no account semantics, and travels in backup; theme choices remain device-local.
+- Empty first-run libraries see onboarding instead of release notes. The guide is permanently reopenable from Stats and explains edition search, reading history, and backup ownership.
 
 ## Bookmarked 2.0 release candidate (2026-07-24)
 

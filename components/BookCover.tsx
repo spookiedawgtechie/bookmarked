@@ -9,7 +9,7 @@ import {
   type TextStyle,
 } from 'react-native';
 import { coverRequestUrl } from '../lib/openlibrary';
-import { colors } from '../lib/theme';
+import { useThemedStyles, type ThemeColors } from '../lib/theme';
 
 type BookCoverProps = Omit<ImageProps, 'source' | 'style' | 'onError'> & {
   uri: string | null;
@@ -27,6 +27,7 @@ export function BookCover({
   fallbackTextStyle,
   ...imageProps
 }: BookCoverProps) {
+  const styles = useThemedStyles(createStyles);
   const requestUri = uri ? coverRequestUrl(uri) : null;
   const [failedUri, setFailedUri] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ export function BookCover({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   fallback: {
     alignItems: 'center',
     justifyContent: 'center',

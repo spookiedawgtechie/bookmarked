@@ -11,17 +11,18 @@ A personal, local-first book tracker — a Letterboxd for books. Search Open Lib
 - **Progress tracking** — a page-number slider (not percentage) drives status automatically; sliding to the last page marks a book finished
 - **Reading sessions** — every page logged is timestamped, powering a streak counter, weekly pace, and accurate "pages read" stats that count in-progress reading, not just finished books
 - **Ratings, reviews & notes** — a 10-point scale with half-point steps, a review, and separate private notes for quotes and reminders
-- **Yearly recaps** — books finished, pages read, top rated, fastest read, longest read, a month-by-month pages chart, and a GitHub-style reading heatmap — plus a one-tap shareable recap image
+- **Yearly recaps** — a cover-first record of everything finished, best reading day, monthly and quarterly activity, heatmap, pace insights, compact highlights, and a dedicated shareable poster
 - **Alternate covers** — pick the edition cover that matches your physical copy
 - **Physical-copy ownership & editions** — track owned, wishlisted, or borrowed copies with edition key, ISBN, publisher, publication date, and language when Open Library provides them
 - **Multiple physical copies** — keep separate editions or duplicate copies of the same Work, each with its own cover, ISBN, page count, ownership, notes, and reading history
 - **Rereads** — start a fresh reading at page zero without losing previous ratings, reviews, dates, or recap history
 - **Backdating** — log books you read years ago with a real finish date, so your history stays honest
-- **Backup & restore** — validated backup v3 JSON with portable IDs, transactional import, keep-newer conflict handling, deletion tombstones, and legacy-backup compatibility
+- **Backup & restore** — validated backup v3 JSON with portable IDs, transactional import, keep-newer conflict handling, deletion tombstones, legacy-backup compatibility, and a portable optional Recap name
 - **Library metrics** — yearly activity, all-time reading count, current-reading count, and total tracked physical copies
 - **Accessible controls** — named cover actions, screen-reader-adjustable sliders, chart summaries, and cross-platform tab icons
 - **Release notes** — a once-per-version “What’s new” summary on APK and PWA, permanently reopenable from Stats
-- **Dark, dense, AMOLED-black UI** — built for one thing: tracking books, not chasing engagement
+- **Personal themes** — Sage, Ink, Ocean, Plum, and Ember palettes with System, Light, tinted Dark, and pure-black AMOLED appearances
+- **First-run guide** — an empty shelf opens a concise introduction to exact editions, reading history, and local backups
 
 ## Stack
 

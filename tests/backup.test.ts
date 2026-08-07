@@ -13,7 +13,9 @@ import {
   deleteBook,
   getAllBooks,
   getAllReadingHistory,
+  getAppSetting,
   migrate,
+  setAppSetting,
   setNotes,
   setRating,
   setStatus,
@@ -63,6 +65,31 @@ test('backup v3 round-trips portable relationships without local numeric ids', a
   assert.equal(restored.title, 'The Odyssey');
   assert.equal(restored.notes, 'Blue hardcover');
   assert.equal(restored.status, 'read');
+});
+
+test('backup carries the optional recap name but not other device settings', async () => {
+  const source = await databaseWithBook();
+  await setAppSetting(source.asDatabase(), 'recap_name', 'tanish');
+  await setAppSetting(source.asDatabase(), 'theme_mode', 'amoled');
+  const payload = await createBackupPayload(source.asDatabase());
+
+  assert.equal(payload.profile.recapName, 'tanish');
+  assert.ok(payload.profile.updatedAt);
+
+  const target = await emptyDatabase();
+  await importBackupPayload(target.asDatabase(), payload);
+  assert.equal(await getAppSetting(target.asDatabase(), 'recap_name'), 'tanish');
+  assert.equal(await getAppSetting(target.asDatabase(), 'theme_mode'), null);
+});
+
+test('older backup v3 files without a profile remain valid', async () => {
+  const source = await databaseWithBook();
+  const payload = await createBackupPayload(source.asDatabase());
+  const oldShape = { ...payload } as Record<string, unknown>;
+  delete oldShape.profile;
+
+  const normalized = parseBackupPayload(oldShape);
+  assert.deepEqual(normalized.profile, { recapName: null, updatedAt: null });
 });
 
 test('merge keeps a newer local edit instead of overwriting it with an older backup', async () => {
@@ -216,6 +243,7 @@ test('validation rejects malformed relationships before any database write', asy
       },
     ],
     tombstones: [],
+    profile: { recapName: null, updatedAt: null },
   };
 
   await assert.rejects(() => importBackupPayload(adapter.asDatabase(), malformed), /without its reading/);

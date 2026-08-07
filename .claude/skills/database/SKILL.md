@@ -50,7 +50,7 @@ Immutable page-delta history: portable `uid`, reading-entry FK, logged/update ti
 
 ### tombstones and app_settings
 
-Deleting a physical copy writes a `library_item` tombstone and cascades its readings/sessions. Tombstones travel in backup v3 so importing an older backup cannot resurrect deleted data. `app_settings` stores device-local settings through parameterized `getAppSetting()` / `setAppSetting()` calls. The current use is `last_seen_release` for the once-per-release changelog; settings are intentionally excluded from backups so each APK/PWA database acknowledges updates independently.
+Deleting a physical copy writes a `library_item` tombstone and cascades its readings/sessions. Tombstones travel in backup v3 so importing an older backup cannot resurrect deleted data. `app_settings` stores preferences through parameterized `getAppSetting()` / `setAppSetting()` calls. Theme, onboarding, and release acknowledgement remain device-local. The one portable exception is `recap_name`: backup v3 carries it in the optional `profile` object with its update timestamp, and keep-newer merge rules apply.
 
 ## Compatibility query rules
 
@@ -82,7 +82,7 @@ Deleting a physical copy writes a `library_item` tombstone and cascades its read
 ## Backup v3
 
 - `lib/backup.ts` is platform-free validation/export/merge logic; `lib/backup-file.ts` owns DocumentPicker/FileSystem/share behavior.
-- Export includes Works, items, readings, sessions, and tombstones with portable UIDs—never local numeric IDs.
+- Export includes Works, items, readings, sessions, tombstones, and the optional Recap name profile with portable identities—never local numeric IDs. It does not export theme/onboarding/release settings.
 - `parseBackupPayload()` validates the complete graph before a write and accepts old schema 1/2 backups by normalizing them to deterministic v3 records.
 - Import is one transaction and has one mode: **merge and keep newer**. ISO dates are canonicalized before lexicographic comparison. Older/equal records are skipped; newer records replace that entity; newer tombstones beat older entities.
 - There is deliberately no destructive replace mode. `.txt` and `.json` files are both accepted.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  bestReadingDays,
   currentStreakDays,
   dailyPagesInYear,
   pagesByMonth,
@@ -35,6 +36,21 @@ test('daily totals combine multiple sessions logged on the same date', () => {
   );
 
   assert.deepEqual(Object.values(totals), [55]);
+});
+
+test('best reading days preserve ties and ignore zero-page corrections', () => {
+  const best = bestReadingDays({
+    '2026-01-01': 42,
+    '2026-01-02': 0,
+    '2026-02-04': 75,
+    '2026-08-09': 75,
+  });
+
+  assert.deepEqual(best, {
+    pages: 75,
+    dates: ['2026-02-04', '2026-08-09'],
+  });
+  assert.equal(bestReadingDays({ '2026-01-01': 0 }), null);
 });
 
 test('recent pages and streak tolerate an empty today', () => {

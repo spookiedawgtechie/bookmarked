@@ -57,6 +57,11 @@ interface BackupTombstone {
   deletedAt: string;
 }
 
+interface BackupProfile {
+  recapName: string | null;
+  updatedAt: string | null;
+}
+
 export interface BackupV3 {
   app: 'bookmarked';
   schemaVersion: 3;
@@ -66,6 +71,7 @@ export interface BackupV3 {
   readingEntries: BackupReadingEntry[];
   sessions: BackupSession[];
   tombstones: BackupTombstone[];
+  profile: BackupProfile;
 }
 
 export interface ImportSummary {
@@ -231,6 +237,21 @@ function normalizeV3(payload: Record<string, unknown>): BackupV3 {
       };
     }
   );
+  let profile: BackupProfile = { recapName: null, updatedAt: null };
+  if (payload.profile !== undefined && payload.profile !== null) {
+    const row = asRecord(payload.profile, 'profile');
+    const recapName = nullableString(row.recapName, 'profile.recapName');
+    if (recapName !== null && recapName.length > 24) {
+      throw new Error('profile.recapName must be 24 characters or fewer');
+    }
+    profile = {
+      recapName,
+      updatedAt: isoDate(row.updatedAt, 'profile.updatedAt', true),
+    };
+    if ((profile.recapName === null) !== (profile.updatedAt === null)) {
+      throw new Error('profile recap name and timestamp must both be present or both be null');
+    }
+  }
 
   unique(works.map((row) => row.uid), 'works');
   unique(libraryItems.map((row) => row.uid), 'libraryItems');
@@ -253,7 +274,7 @@ function normalizeV3(payload: Record<string, unknown>): BackupV3 {
       activeByItem.add(reading.libraryItemUid);
     }
   }
-  return { app: 'bookmarked', schemaVersion: 3, exportedAt, works, libraryItems, readingEntries, sessions, tombstones };
+  return { app: 'bookmarked', schemaVersion: 3, exportedAt, works, libraryItems, readingEntries, sessions, tombstones, profile };
 }
 
 function legacyString(row: Record<string, unknown>, key: string): string | null {
@@ -357,7 +378,17 @@ function normalizeLegacy(payload: Record<string, unknown>): BackupV3 {
       updatedAt: loggedAt,
     });
   }
-  return { app: 'bookmarked', schemaVersion: 3, exportedAt, works, libraryItems, readingEntries, sessions, tombstones: [] };
+  return {
+    app: 'bookmarked',
+    schemaVersion: 3,
+    exportedAt,
+    works,
+    libraryItems,
+    readingEntries,
+    sessions,
+    tombstones: [],
+    profile: { recapName: null, updatedAt: null },
+  };
 }
 
 export function parseBackupText(text: string): BackupV3 {
@@ -408,6 +439,9 @@ export async function createBackupPayload(db: SQLiteDatabase): Promise<BackupV3>
   const tombstones = await db.getAllAsync<BackupTombstone>(
     `SELECT entity_type AS entityType, uid, deleted_at AS deletedAt FROM tombstones`
   );
+  const recapName = await db.getFirstAsync<{ value: string; updatedAt: string }>(
+    `SELECT value, updated_at AS updatedAt FROM app_settings WHERE key = 'recap_name'`
+  );
   return {
     app: 'bookmarked',
     schemaVersion: 3,
@@ -417,6 +451,9 @@ export async function createBackupPayload(db: SQLiteDatabase): Promise<BackupV3>
     readingEntries,
     sessions,
     tombstones,
+    profile: recapName
+      ? { recapName: recapName.value, updatedAt: recapName.updatedAt }
+      : { recapName: null, updatedAt: null },
   };
 }
 
@@ -575,6 +612,17 @@ async function mergePayload(db: SQLiteDatabase, payload: BackupV3): Promise<Impo
       session.fromPage,
       session.toPage,
       session.updatedAt
+    );
+    result.changes > 0 ? changed++ : skipped++;
+  }
+  if (payload.profile.recapName !== null && payload.profile.updatedAt !== null) {
+    const result = await db.runAsync(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES ('recap_name', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value, updated_at = excluded.updated_at
+       WHERE excluded.updated_at > app_settings.updated_at`,
+      payload.profile.recapName,
+      payload.profile.updatedAt
     );
     result.changes > 0 ? changed++ : skipped++;
   }

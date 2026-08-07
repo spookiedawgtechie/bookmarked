@@ -1,6 +1,6 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CURRENT_RELEASE } from '../lib/releases';
-import { colors } from '../lib/theme';
+import { useThemedStyles, type ThemeColors } from '../lib/theme';
 
 type WhatsNewModalProps = {
   visible: boolean;
@@ -15,6 +15,7 @@ export function WhatsNewModal({
   saving = false,
   error = null,
 }: WhatsNewModalProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Modal
       visible={visible}
@@ -80,7 +81,7 @@ export function WhatsNewModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,

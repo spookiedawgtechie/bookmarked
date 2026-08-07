@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Platform, type ColorValue } from 'react-native';
-import { colors } from '../../lib/theme';
+import { useTheme } from '../../lib/theme';
 
 type TabSymbol = SymbolViewProps['name'];
 
@@ -10,6 +10,7 @@ function TabIcon({ name, color }: { name: TabSymbol; color: ColorValue }) {
 }
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
   return (
     <Tabs
       screenOptions={{

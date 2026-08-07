@@ -28,11 +28,13 @@ import {
   searchBooks,
   type SearchResult,
 } from '../../lib/openlibrary';
-import { colors } from '../../lib/theme';
+import { useTheme, useThemedStyles, type ThemeColors } from '../../lib/theme';
 import { readableContentStyle } from '../../lib/layout';
 
 export default function Search() {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -396,7 +398,7 @@ export default function Search() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { flex: 1, paddingHorizontal: 16 },
   inputWrap: { marginTop: 12, marginBottom: 12, justifyContent: 'center' },

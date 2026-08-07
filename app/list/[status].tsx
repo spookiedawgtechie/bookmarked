@@ -11,7 +11,7 @@ import {
   libraryContentStyle,
   libraryGridColumns,
 } from '../../lib/layout';
-import { colors } from '../../lib/theme';
+import { useTheme, useThemedStyles, type ThemeColors } from '../../lib/theme';
 import type { Book } from '../../lib/types';
 
 const GRID_GAP = 10;
@@ -39,6 +39,8 @@ const READ_SORTS: { key: SortKey; label: string }[] = [
 
 export default function StatusList() {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { status } = useLocalSearchParams<{ status: string }>();
   const [books, setBooks] = useState<Book[]>([]);
   const [query, setQuery] = useState('');
@@ -168,7 +170,7 @@ export default function StatusList() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pageContent: { padding: 16, paddingBottom: 48 },
   searchInput: {

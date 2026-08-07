@@ -22,7 +22,7 @@ import {
   libraryGridColumns,
 } from '../../lib/layout';
 import { currentStreakDays, pagesInLastDays, pagesInYear } from '../../lib/stats';
-import { colors } from '../../lib/theme';
+import { useTheme, useThemedStyles, type ThemeColors } from '../../lib/theme';
 import type { Book, ReadingSession } from '../../lib/types';
 
 const GRID_GAP = 10;
@@ -60,6 +60,7 @@ function CoverThumb({
   coverSize: { width: number; height: number };
   showRating?: boolean;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Link href={{ pathname: '/book/[id]', params: { id: String(book.id) } }} asChild>
       <Pressable
@@ -95,6 +96,7 @@ function HeroCard({
   desktop: boolean;
   onLog: (b: Book) => void;
 }) {
+  const styles = useThemedStyles(createStyles);
   const pct = progressPct(book);
   return (
     <Pressable
@@ -151,6 +153,7 @@ function HeroCard({
 }
 
 function RowHeader({ label, accent, href }: { label: string; accent: string; href?: string }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.rowHeader}>
       <Text style={[styles.sectionLabel, { color: accent }]}>{label}</Text>
@@ -167,6 +170,8 @@ function RowHeader({ label, accent, href }: { label: string; accent: string; hre
 
 export default function Shelf() {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const { columns, coverSize } = coverMetrics(width);
   const desktop = isDesktopWidth(width);
@@ -384,7 +389,7 @@ export default function Shelf() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pageContent: { paddingBottom: 96 },
   paceRow: {

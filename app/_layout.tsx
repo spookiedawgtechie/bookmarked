@@ -1,16 +1,20 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WhatsNewModal } from '../components/WhatsNewModal';
+import {
+  ONBOARDING_COMPLETE_KEY,
+  OnboardingModal,
+} from '../components/OnboardingModal';
 import { getAppSetting, migrate, setAppSetting } from '../lib/db';
 import {
   CURRENT_RELEASE,
   LAST_SEEN_RELEASE_KEY,
   shouldShowRelease,
 } from '../lib/releases';
-import { colors } from '../lib/theme';
+import { ThemeProvider, colors, useTheme } from '../lib/theme';
 
 type TabGateState = 'checking' | 'ready' | 'blocked';
 
@@ -126,17 +130,26 @@ function useSingleWebTab(attempt: number): TabGateState {
   return state;
 }
 
-function ReleaseNotesGate() {
+function StartupExperienceGate() {
   const db = useSQLiteContext();
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState<'onboarding' | 'release' | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    getAppSetting(db, LAST_SEEN_RELEASE_KEY)
-      .then((lastSeen) => {
-        if (active && shouldShowRelease(lastSeen)) setVisible(true);
+    Promise.all([
+      getAppSetting(db, ONBOARDING_COMPLETE_KEY),
+      getAppSetting(db, LAST_SEEN_RELEASE_KEY),
+      db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM library_items'),
+    ])
+      .then(([onboardingComplete, lastSeen, library]) => {
+        if (!active) return;
+        if ((library?.count ?? 0) === 0 && onboardingComplete !== 'true') {
+          setVisible('onboarding');
+        } else if (shouldShowRelease(lastSeen)) {
+          setVisible('release');
+        }
       })
       .catch(() => {
         // Release notes are helpful but must never prevent the library opening.
@@ -146,13 +159,31 @@ function ReleaseNotesGate() {
     };
   }, [db]);
 
-  async function dismiss() {
+  async function acknowledgeOnboarding(openSearch: boolean) {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await Promise.all([
+        setAppSetting(db, ONBOARDING_COMPLETE_KEY, 'true'),
+        setAppSetting(db, LAST_SEEN_RELEASE_KEY, CURRENT_RELEASE.id),
+      ]);
+      setVisible(null);
+      if (openSearch) router.push('/search');
+    } catch {
+      setError('Could not save this choice. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function dismissRelease() {
     if (saving) return;
     setSaving(true);
     setError(null);
     try {
       await setAppSetting(db, LAST_SEEN_RELEASE_KEY, CURRENT_RELEASE.id);
-      setVisible(false);
+      setVisible(null);
     } catch {
       setError('Could not save this acknowledgement. Please try again.');
     } finally {
@@ -161,14 +192,23 @@ function ReleaseNotesGate() {
   }
 
   return (
-    <WhatsNewModal
-      visible={visible}
-      onDismiss={() => {
-        void dismiss();
-      }}
-      saving={saving}
-      error={error}
-    />
+    <>
+      <OnboardingModal
+        visible={visible === 'onboarding'}
+        onStart={() => void acknowledgeOnboarding(true)}
+        onSkip={() => void acknowledgeOnboarding(false)}
+        saving={saving}
+        error={error}
+      />
+      <WhatsNewModal
+        visible={visible === 'release'}
+        onDismiss={() => {
+          void dismissRelease();
+        }}
+        saving={saving}
+        error={error}
+      />
+    </>
   );
 }
 
@@ -216,21 +256,39 @@ export default function RootLayout() {
 
   return (
     <SQLiteProvider databaseName="bookmarked.db" onInit={migrate}>
-      <StatusBar style="light" />
+      <DatabaseThemeRoot />
+    </SQLiteProvider>
+  );
+}
+
+function DatabaseThemeRoot() {
+  const db = useSQLiteContext();
+  return (
+    <ThemeProvider db={db}>
+      <ThemedNavigator />
+    </ThemeProvider>
+  );
+}
+
+function ThemedNavigator() {
+  const { colors: activeColors, resolvedMode } = useTheme();
+  return (
+    <>
+      <StatusBar style={resolvedMode === 'light' ? 'dark' : 'light'} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.text,
-          headerTitleStyle: { color: colors.text },
+          headerStyle: { backgroundColor: activeColors.bg },
+          headerTintColor: activeColors.text,
+          headerTitleStyle: { color: activeColors.text },
           headerTitleAlign: Platform.OS === 'web' ? 'center' : undefined,
-          contentStyle: { backgroundColor: colors.bg },
+          contentStyle: { backgroundColor: activeColors.bg },
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="book/[id]" options={{ title: 'Book' }} />
       </Stack>
-      <ReleaseNotesGate />
-    </SQLiteProvider>
+      <StartupExperienceGate />
+    </>
   );
 }
 

@@ -4,6 +4,25 @@ All notable user-facing changes to Bookmarked are recorded here.
 
 ## Unreleased
 
+### Personal themes
+
+- Replaced the fixed neon palette with Sage, Ink, Ocean, Plum, and Ember.
+- Added System, Light, tinted Dark, and pure-black AMOLED appearance choices.
+- Kept theme preferences device-local so APK and PWA can suit their own displays.
+
+### Recap redesign
+
+- Made every completed reading—including rereads—the primary cover gallery.
+- Promoted the biggest reading day, with tied days preserved, and reorganized monthly, quarterly, heatmap, and pace analytics.
+- Moved Top rated, Fastest, and Longest into compact secondary highlights.
+- Added an optional Recap name and a dedicated celebratory share poster capped at 12 covers plus a remaining count.
+- Included the Recap name in backup keep-newer merging without exporting visual preferences.
+
+### First-run guide
+
+- Added an empty-library introduction covering exact editions, reading history, and local backups.
+- Prevented onboarding and release notes from stacking, and made the guide reopenable from Stats.
+
 ### Multiple physical copies
 
 - Added a physical-copy manager when a searched Work is already in the library.

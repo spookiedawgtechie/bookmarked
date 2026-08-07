@@ -37,24 +37,24 @@ import {
 import { confirmDialog, notify } from '../../lib/alert';
 import { formatDate } from '../../lib/format';
 import { coverUrl, fetchCoverIds, fetchDescription, sanitizeDescription } from '../../lib/openlibrary';
-import { colors } from '../../lib/theme';
+import { useTheme, useThemedStyles, type ThemeColors } from '../../lib/theme';
 import { readableContentStyle } from '../../lib/layout';
 import type { Book, BookOwnership, BookStatus } from '../../lib/types';
 
-const STATUSES: { value: BookStatus; label: string; accent: string }[] = [
-  { value: 'want', label: 'Want to Read', accent: colors.blue },
-  { value: 'reading', label: 'Reading', accent: colors.green },
-  { value: 'read', label: 'Read', accent: colors.orange },
-];
-
-const OWNERSHIP: { value: BookOwnership; label: string; accent: string }[] = [
-  { value: 'owned', label: 'Owned', accent: colors.green },
-  { value: 'wishlist', label: 'Wishlist', accent: colors.blue },
-  { value: 'borrowed', label: 'Borrowed', accent: colors.orange },
-];
-
 export default function BookDetail() {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const statuses: { value: BookStatus; label: string; accent: string }[] = [
+    { value: 'want', label: 'Want to Read', accent: colors.secondary },
+    { value: 'reading', label: 'Reading', accent: colors.primary },
+    { value: 'read', label: 'Read', accent: colors.tertiary },
+  ];
+  const ownershipOptions: { value: BookOwnership; label: string; accent: string }[] = [
+    { value: 'owned', label: 'Owned', accent: colors.primary },
+    { value: 'wishlist', label: 'Wishlist', accent: colors.secondary },
+    { value: 'borrowed', label: 'Borrowed', accent: colors.tertiary },
+  ];
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
   const [book, setBook] = useState<Book | null>(null);
@@ -463,7 +463,7 @@ export default function BookDetail() {
             accessibilityRole="radiogroup"
             accessibilityLabel="Physical copy ownership"
           >
-            {OWNERSHIP.map((option) => {
+            {ownershipOptions.map((option) => {
               const active = book.ownership === option.value;
               return (
                 <Pressable
@@ -500,7 +500,7 @@ export default function BookDetail() {
             accessibilityRole="radiogroup"
             accessibilityLabel="Reading status"
           >
-            {STATUSES.map((s) => {
+            {statuses.map((s) => {
               const active = book.status === s.value;
               return (
                 <Pressable
@@ -831,7 +831,7 @@ export default function BookDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pageContent: { padding: 16, paddingBottom: 48 },
   header: { flexDirection: 'row', marginBottom: 20 },

@@ -57,6 +57,21 @@ export function dailyPagesInYear(
   return result;
 }
 
+export function bestReadingDays(
+  dailyPages: Record<string, number>
+): { pages: number; dates: string[] } | null {
+  const positive = Object.entries(dailyPages).filter(([, pages]) => pages > 0);
+  if (positive.length === 0) return null;
+  const pages = Math.max(...positive.map(([, count]) => count));
+  return {
+    pages,
+    dates: positive
+      .filter(([, count]) => count === pages)
+      .map(([date]) => date)
+      .sort(),
+  };
+}
+
 // Consecutive calendar days, ending today or yesterday, with at least one
 // logged session. Multiple sessions on the same day count once.
 export function currentStreakDays(sessions: ReadingSession[]): number {

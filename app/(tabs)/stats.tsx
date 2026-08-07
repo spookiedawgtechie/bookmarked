@@ -2,17 +2,20 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { OnboardingModal } from '../../components/OnboardingModal';
+import { PersonalizationSettings } from '../../components/PersonalizationSettings';
 import { WhatsNewModal } from '../../components/WhatsNewModal';
 import { confirmDialog, notify } from '../../lib/alert';
 import { exportLibrary, importLibrary } from '../../lib/backup-file';
 import { getAllBooks, getAllReadingHistory, getAllSessions } from '../../lib/db';
 import { pagesInYear } from '../../lib/stats';
-import { colors } from '../../lib/theme';
+import { useThemedStyles, type ThemeColors } from '../../lib/theme';
 import { readableContentStyle } from '../../lib/layout';
 import { CURRENT_RELEASE } from '../../lib/releases';
 import type { Book, ReadingSession } from '../../lib/types';
 
 function StatCard({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.card} accessible accessibilityLabel={`${label}: ${value}`}>
       <Text style={styles.cardValue}>{value}</Text>
@@ -27,6 +30,9 @@ export default function Stats() {
   const [readings, setReadings] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<ReadingSession[]>([]);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [settingsRefresh, setSettingsRefresh] = useState(0);
+  const styles = useThemedStyles(createStyles);
 
   useFocusEffect(
     useCallback(() => {
@@ -154,6 +160,7 @@ export default function Stats() {
                   getAllBooks(db).then(setBooks);
                   getAllReadingHistory(db).then(setReadings);
                   getAllSessions(db).then(setSessions);
+                  setSettingsRefresh((value) => value + 1);
                 }
               } catch (error) {
                 const reason = error instanceof Error ? `\n\nReason: ${error.message}` : '';
@@ -173,7 +180,19 @@ export default function Stats() {
         <Text style={styles.recapRowArrow}>↑</Text>
       </Pressable>
 
+      <Text style={styles.subheading}>Personalise</Text>
+      <PersonalizationSettings refreshToken={settingsRefresh} />
+
       <Text style={styles.subheading}>About</Text>
+      <Pressable
+        style={styles.recapRow}
+        onPress={() => setOnboardingOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Open introduction to Bookmarked"
+      >
+        <Text style={styles.recapRowText}>How Bookmarked works</Text>
+        <Text style={styles.recapRowArrow}>→</Text>
+      </Pressable>
       <Pressable
         style={styles.recapRow}
         onPress={() => setReleaseNotesOpen(true)}
@@ -188,11 +207,19 @@ export default function Stats() {
         visible={releaseNotesOpen}
         onDismiss={() => setReleaseNotesOpen(false)}
       />
+      <OnboardingModal
+        visible={onboardingOpen}
+        onStart={() => {
+          setOnboardingOpen(false);
+          router.push('/search');
+        }}
+        onSkip={() => setOnboardingOpen(false)}
+      />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pageContent: { padding: 16, paddingBottom: 96 },
   heading: { color: colors.text, fontSize: 28, fontWeight: '800', marginBottom: 16 },
