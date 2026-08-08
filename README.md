@@ -2,7 +2,9 @@
 
 A personal, local-first book tracker — a Letterboxd for books. Search Open Library, track what you're reading, log progress page by page, rate and review, and get a proper year-in-review recap. No accounts, no server, no ads: your library lives in a SQLite database on your own device.
 
-**Live:** [bookmarked-psi.vercel.app](https://bookmarked-psi.vercel.app) (also installable as an Android APK — see [Releases](#releases))
+**Live:** [bookmarked-psi.vercel.app](https://bookmarked-psi.vercel.app) (also installable as an Android APK from [GitHub Releases](https://github.com/spookiedawgtechie/bookmarked/releases)).
+
+> **Public beta:** Bookmarked is local-first and has no cloud sync. Export a backup from Stats regularly, especially when using the iOS PWA.
 
 ## Features
 
@@ -56,9 +58,11 @@ The one-sentence architecture: a React app whose backend is a SQLite file sittin
 
 ## Releases
 
-- **Current release** — Bookmarked 2.0.1. See [CHANGELOG.md](CHANGELOG.md) for the complete user-facing changes.
-- **Android** — built via `eas build --profile preview`, distributed as a direct-install APK (no Play Store). See `.claude/skills/release-android/SKILL.md`.
+- **Current release** — [Bookmarked 2.1.0 Public Beta](https://github.com/spookiedawgtechie/bookmarked/releases/tag/v2.1.0). See [CHANGELOG.md](CHANGELOG.md) for the complete user-facing changes.
+- **Android** — download the APK from GitHub Releases. Android will ask you to allow installation from your browser or file manager because Bookmarked is not distributed through the Play Store. Install future APKs over the existing app to preserve its local database; uninstalling removes local app data.
 - **Web** — `vercel --prod`, deployed from `.claude/skills/release-pwa/SKILL.md`'s process. Works as an installable PWA (Add to Home Screen on iOS/Android).
+
+Each browser and device has an independent library. Move data between them using Stats → Share backup file and Import library from JSON. Read the [privacy notice](PRIVACY.md) before using the public beta.
 
 ## Documentation
 
